@@ -48,7 +48,12 @@ export interface AgentConfig {
   tools: Tool[];
   toolLogic?: Record<
     string,
-    (args: any, transcriptLogsFiltered: TranscriptItem[], addTranscriptBreadcrumb?: (title: string, data?: any) => void) => Promise<any> | any
+    (
+      args: any,
+      transcriptLogsFiltered: TranscriptItem[],
+      addTranscriptBreadcrumb?: (title: string, data?: any) => void,
+      userContext?: { userId: string; walletAddress?: string }
+    ) => Promise<any> | any
   >;
   // addTranscriptBreadcrumb is a param in case we want to add additional breadcrumbs, e.g. for nested tool calls from a supervisor agent.
   downstreamAgents?:
@@ -60,7 +65,7 @@ export type AllAgentConfigsType = Record<string, AgentConfig[]>;
 
 export interface GuardrailResultType {
   status: "IN_PROGRESS" | "DONE";
-  testText?: string; 
+  testText?: string;
   category?: ModerationCategory;
   rationale?: string;
 }
