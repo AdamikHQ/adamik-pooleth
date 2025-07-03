@@ -27,7 +27,7 @@ if (typeof window !== "undefined") {
         configurable: true,
         enumerable: true,
       });
-    } catch (error) {
+    } catch {
       // If property is already non-configurable, log and continue
       console.log(
         "Ethereum provider conflict detected, continuing with existing provider"

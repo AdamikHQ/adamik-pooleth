@@ -1,6 +1,8 @@
 export const chains = [
   "ethereum",
   "solana",
+  "tron",
+  "cosmos",
   "sepolia",
   "holesky",
   "zksync",

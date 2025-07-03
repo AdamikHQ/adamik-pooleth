@@ -32,70 +32,53 @@ A sophisticated voice-enabled blockchain assistant powered by OpenAI's Realtime 
 
 ### System Overview
 
-This application is **not** an MCP (Model Context Protocol) server, but rather a **blockchain agent system** that uses Privy as its secure wallet backend. The Adamik agent provides blockchain intelligence and operations, while Privy handles the cryptographic infrastructure.
+This application uses a **main agent + supervisor agent** pattern for advanced, reliable, and extensible voice-based blockchain operations.
 
-### Architecture Flow
+### Main Agent + Supervisor Pattern
+
+- **Main Agent**: Handles real-time conversation and delegates all tool calls to the supervisor agent. Keeps the conversation fast and responsive.
+- **Supervisor Agent**: Implements all tool logic, powered by a more capable model (e.g., gpt-4.1). Handles complex, high-stakes, or tool-using tasks.
+- **Benefits**: Centralizes tool logic, enables high-quality tool use, and allows for future extensibility (e.g., multi-agent handoffs).
+
+#### Main Agent + Supervisor Flow Diagram
 
 ```mermaid
 graph TD
     A["User Voice Input"] --> B["OpenAI Realtime API"]
-    B --> C["Adamik Agent Config"]
+    B --> C["Main Agent (Adamik)"]
     C --> D{"Tool Required?"}
-
     D -->|No| E["Direct AI Response"]
-    D -->|Yes| F["Tool Execution"]
-
-    F --> G["makeWalletRequest"]
-    F --> H["makeProxyRequest"]
-
-    G --> I["API: wallet route"]
-    H --> J["API: adamik route"]
-
-    I --> K["Privy Service"]
-    J --> L["Adamik API"]
-
-    K --> M["Privy Infrastructure"]
-    L --> N["Blockchain Networks"]
-
-    M --> O["Embedded Wallet Operations:<br/>• Key Management<br/>• Transaction Signing<br/>• Address Derivation"]
-
-    N --> P["Blockchain Operations:<br/>• Balance Queries<br/>• Transaction Broadcasting<br/>• Chain Validation"]
-
-    O --> Q["Response Data"]
-    P --> Q
-
-    Q --> R["Tool Result"]
-    R --> S["Agent Processing"]
-    S --> T["AI Response Generation"]
-    T --> U["Voice Output to User"]
+    D -->|Yes| F["Delegate Tool Call to Supervisor"]
+    F --> G["Supervisor Agent (Tool Logic)"]
+    G --> H["API Layer (makeWalletRequest/makeProxyRequest)"]
+    H --> I["Service Layer (Privy/Adamik API)"]
+    I --> J["Infrastructure Layer (Wallets/Blockchains)"]
+    J --> K["Response Data"]
+    K --> L["Supervisor Returns Tool Result"]
+    L --> M["Main Agent Processes Result"]
+    M --> N["AI Response Generation"]
+    N --> O["Voice Output to User"]
 
     subgraph "Agent Layer"
         C
         F
-    end
-
-    subgraph "API Layer"
         G
+    end
+    subgraph "API Layer"
         H
+    end
+    subgraph "Service Layer"
         I
+    end
+    subgraph "Infrastructure Layer"
         J
     end
-
-    subgraph "Service Layer"
-        K
-        L
-    end
-
-    subgraph "Infrastructure Layer"
-        M
-        N
-    end
-
     style A fill:#e1f5fe
-    style U fill:#e8f5e8
+    style O fill:#e8f5e8
     style C fill:#fff3e0
-    style K fill:#f3e5f5
-    style M fill:#fce4ec
+    style G fill:#ffe0b2
+    style H fill:#f3e5f5
+    style I fill:#fce4ec
 ```
 
 ### Component Architecture
@@ -284,29 +267,154 @@ npm start
 
 ### Multi-Chain Wallet Management
 
-The system supports creating and managing wallets across multiple blockchain networks:
+The system supports creating and managing wallets across multiple blockchain networks with **different filtering policies** depending on how you access the system:
 
-**Supported Base Chain Types**:
+#### Chain Filtering Policies
 
-- **Ethereum**: For all EVM-compatible networks (Ethereum, Base, Arbitrum, Polygon, etc.)
-- **Solana**: For Solana network operations
-- **TRON**: For TRON network operations
-- **Cosmos**: For Cosmos SDK-based networks
-- **Stellar**: For Stellar network operations
+**🎙️ Voice Agent (STRICT Filtering)**
 
-**Automatic Chain Mapping**:
-When creating wallets for specific networks, the system automatically maps them to the appropriate base type:
+The voice agent enforces **strict chain validation** and only accepts chains explicitly defined in `src/app/agentConfigs/adamik/chains.ts`:
 
-- Networks like `base`, `arbitrum`, `polygon` → `ethereum` base type
-- Each user can have one wallet per base type
-- EVM wallets work across all EVM-compatible networks with the same address
+- **Allowed Chains**: Only ~40 predefined blockchain networks
+- **Validation**: Each chain name must exactly match entries in `chains.ts`
+- **Voice Commands**: "Create a wallet for base" ✅ vs "Create a wallet for unknown-chain" ❌
+- **Purpose**: Prevents voice recognition errors and ensures reliable blockchain operations
 
-**Voice Commands for Wallet Management**:
+**🔧 Direct API (PERMISSIVE Filtering)**
+
+The direct API endpoints (`/api/wallet`) use **permissive chain handling**:
+
+- **Accepts**: Any chain name as input
+- **Auto-Mapping**: Unknown chains automatically map to `ethereum` base type
+- **Fallback**: EVM-compatible networks work seamlessly
+- **Purpose**: Maximum flexibility for programmatic access
+
+#### Supported Base Chain Types
+
+All wallets are organized into **5 base chain types**, regardless of specific network:
+
+- **`ethereum`**: For all EVM-compatible networks (Ethereum, Base, Arbitrum, Polygon, BSC, etc.)
+- **`solana`**: For Solana network operations
+- **`tron`**: For TRON network operations
+- **`cosmos`**: For Cosmos SDK-based networks
+- **`stellar`**: For Stellar network operations
+
+#### Automatic Chain Mapping
+
+The system intelligently maps specific networks to base types:
+
+```typescript
+// Voice Agent: STRICT - only accepts predefined chains
+const voiceChains = [
+  "ethereum", "base", "arbitrum", "polygon", "optimism",
+  "bsc", "avalanche", "solana", "tron", "cosmos", "stellar"
+  // ... ~40 total predefined chains
+];
+
+// API: PERMISSIVE - maps any chain to base type
+const chainMapping = {
+  "base" → "ethereum",           // EVM networks map to ethereum
+  "arbitrum" → "ethereum",
+  "polygon" → "ethereum",
+  "custom-evm" → "ethereum",     // Unknown EVM chains default to ethereum
+  "solana" → "solana",           // Direct mapping for other base types
+  "unknown-chain" → "ethereum"   // Unknown chains fallback to ethereum
+};
+```
+
+#### Voice Commands for Wallet Management
+
+**✅ Supported Voice Commands** (chains from `chains.ts`):
 
 - "Create a new Solana wallet"
+- "Create a wallet for Base network"
+- "Show my Arbitrum address"
 - "List all my wallets"
-- "Show my Base network address"
-- "Create a wallet for TRON"
+- "What's my Polygon address?"
+- "Create a TRON wallet"
+
+**❌ Unsupported Voice Commands** (not in `chains.ts`):
+
+- "Create a wallet for my-custom-chain"
+- "Show my unknown-network address"
+
+#### Wallet Creation Behavior
+
+**One Wallet Per Base Type**: Each user can have one wallet per base chain type, but that wallet works across all networks of that type:
+
+```typescript
+// User creates ethereum wallet
+createWallet({ chainType: "ethereum" });
+// Result: One wallet that works for ALL EVM networks:
+// - Ethereum mainnet: 0xABC...123
+// - Base network: 0xABC...123 (same address)
+// - Arbitrum: 0xABC...123 (same address)
+// - Polygon: 0xABC...123 (same address)
+
+// User creates solana wallet
+createWallet({ chainType: "solana" });
+// Result: Separate Solana wallet
+// - Solana: ACHFP5Ze4cw7SyFPShF1LsEQ4afpnMNRNgzJVjgmjFgG
+```
+
+#### Comprehensive Chain Support
+
+**Voice Agent Supported Networks** (from `chains.ts`):
+
+**EVM Networks**:
+
+- `ethereum`, `base`, `arbitrum`, `polygon`, `optimism`
+- `bsc`, `avalanche`, `zksync`, `linea`, `gnosis`
+- `moonbeam`, `fantom`, `mantle`, `cronos`, `world-chain`
+
+**Testnets**:
+
+- `sepolia`, `holesky`, `base-sepolia`, `polygon-amoy`
+
+**Non-EVM Networks**:
+
+- `solana`, `tron`, `cosmos`, `stellar`
+
+**API Supported Networks**: Any chain name (with automatic base type mapping)
+
+#### Real-World Testing Results
+
+Our comprehensive testing confirmed the system works with **real multi-chain wallets**:
+
+```json
+// User: did:privy:cmcnf68ol00j4i30mxrx7hgiv
+{
+  "wallets": [
+    {
+      "chainType": "ethereum",
+      "address": "0xb5bC63da4C78A933c30D50f03333E34f84196B56",
+      "id": null // Primary wallet (no ID)
+    },
+    {
+      "chainType": "solana",
+      "address": "ACHFP5Ze4cw7SyFPShF1LsEQ4afpnMNRNgzJVjgmjFgG",
+      "id": "d7uers5z1b11bcvkt8gk0ry5"
+    },
+    {
+      "chainType": "tron",
+      "address": "TTrdkgmkVma6S1ZWabMR7qgSB1ouVbBEBk",
+      "id": "kz3aa46a85dhpstw2t0mskf2"
+    },
+    {
+      "chainType": "cosmos",
+      "address": "cosmos1kneyyfm6vdul03hpm65hqtqtqljlwu547v5zks",
+      "id": "vn8e9wdawna1ya3vus9etpxd"
+    },
+    {
+      "chainType": "stellar",
+      "address": "GDDIGYPJSZKM5CDIMDWMRB4SQNDMOWES3CIK3EUFQGCEFI4HDGTOSLKR",
+      "id": "pfewukwk9z3drybncu6m5w9v"
+    }
+  ]
+}
+```
+
+**✅ All Tests Passed**: 19/19 including core functionality, multi-chain support, error handling, and agent integration.
 
 ### Push-to-Talk Mode
 
