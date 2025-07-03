@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
-import { PrivyClient } from "@privy-io/server-auth";
-
-const privyClient = new PrivyClient(
-  process.env.PRIVY_APP_ID!,
-  process.env.PRIVY_APP_SECRET!
-);
+import { privyService } from "@/app/services/privy";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, userId, walletAddress } = body;
+    const { action, userId, walletAddress, chainType, hash } = body;
 
-    console.log("🔍 Wallet API Debug:", { action, userId, walletAddress });
-    console.log("🔍 Privy Config:", {
-      appId: process.env.PRIVY_APP_ID ? "✅ Set" : "❌ Missing",
-      appSecret: process.env.PRIVY_APP_SECRET ? "✅ Set" : "❌ Missing",
+    console.log("🔍 Wallet API Debug:", {
+      action,
+      userId,
+      walletAddress,
+      chainType,
     });
 
     if (!userId) {
@@ -25,86 +21,174 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get user from Privy
-    console.log("🔍 Fetching user from Privy...");
-    const user = await privyClient.getUser(userId);
-    console.log("✅ User fetched:", {
-      id: user.id,
-      linkedAccounts: user.linkedAccounts?.length,
-    });
-
-    // Find the embedded wallet for this user
-    console.log("🔍 Looking for wallet in linked accounts...");
-    const wallet = user.linkedAccounts.find(
-      (account: any) =>
-        account.type === "wallet" &&
-        account.walletClientType === "privy" &&
-        account.chainType === "ethereum" &&
-        (!walletAddress ||
-          account.address?.toLowerCase() === walletAddress.toLowerCase())
-    ) as any; // Type assertion for Privy wallet
-
-    console.log(
-      "🔍 Wallet search result:",
-      wallet ? "✅ Found" : "❌ Not found"
-    );
-    if (wallet) {
-      console.log("🔍 Wallet details:", {
-        type: wallet.type,
-        walletClientType: wallet.walletClientType,
-        chainType: wallet.chainType,
-        address: wallet.address,
-      });
-    } else {
-      console.log(
-        "🔍 Available accounts:",
-        user.linkedAccounts.map((acc: any) => ({
-          type: acc.type,
-          walletClientType: acc.walletClientType,
-          chainType: acc.chainType,
-        }))
-      );
-    }
-
-    if (!wallet) {
-      console.log("❌ No matching wallet found");
-      return NextResponse.json(
-        { error: "Wallet not found for user" },
-        { status: 404 }
-      );
-    }
-
     switch (action) {
-      case "getPubKey":
-        // For embedded wallets, we return the address as a simplified public key
-        // In production, you might want to derive the actual public key
+      case "listWallets":
+        // Return all available embedded wallets for the user
+        const wallets = await privyService.getUserWallets(userId);
         return NextResponse.json({
-          publicKey: wallet.address,
-          address: wallet.address,
+          wallets: wallets.map((wallet) => ({
+            id: wallet.id,
+            address: wallet.address,
+            chainType: wallet.chainType,
+            walletClientType: "privy",
+          })),
+        });
+
+      case "getPubKey":
+        // Get wallet and extract public key for Adamik address derivation
+        const walletForPubKey = await privyService.getWallet(userId, {
+          walletAddress,
+          chainType,
+        });
+
+        if (!walletForPubKey) {
+          return NextResponse.json(
+            { error: "No matching wallet found" },
+            { status: 404 }
+          );
+        }
+
+        const publicKey = await privyService.getPublicKey(walletForPubKey.id);
+        return NextResponse.json({
+          publicKey,
+          walletId: walletForPubKey.id,
+          address: walletForPubKey.address,
+          chainType: walletForPubKey.chainType,
+          note:
+            publicKey === null
+              ? "Privy does not expose public keys"
+              : undefined,
         });
 
       case "getAddress":
-        return NextResponse.json({ address: wallet.address });
+        // Get wallet address (legacy compatibility)
+        const walletForAddress = await privyService.getWallet(userId, {
+          walletAddress,
+          chainType,
+        });
 
-      case "signTransaction":
-        try {
-          // For now, return a placeholder - we'll implement proper signing later
-          // This requires setting up the Privy wallet API with proper authentication
+        if (!walletForAddress) {
           return NextResponse.json(
-            {
-              error: "Transaction signing not yet implemented with Privy",
-              message:
-                "Please implement using Privy's walletApi.ethereum.signTransaction method",
-            },
-            { status: 501 }
+            { error: "No matching wallet found" },
+            { status: 404 }
           );
-        } catch (error: any) {
-          console.error("Error signing transaction:", error);
+        }
+
+        return NextResponse.json({
+          address: walletForAddress.address,
+          chainType: walletForAddress.chainType,
+        });
+
+      case "getWalletForAdamik":
+        // Get wallet info optimized for Adamik API calls
+        const adamikWallet = await privyService.getWalletForAdamik(userId, {
+          walletAddress,
+          chainType,
+        });
+
+        if (!adamikWallet) {
           return NextResponse.json(
-            { error: "Failed to sign transaction" },
+            { error: "No wallet found or failed to extract public key" },
+            { status: 404 }
+          );
+        }
+
+        return NextResponse.json(adamikWallet);
+
+      case "rawSign":
+        // Sign a raw hash for any blockchain transaction
+        if (!hash) {
+          return NextResponse.json(
+            { error: "Hash is required for raw signing" },
+            { status: 400 }
+          );
+        }
+
+        const walletForSigning = await privyService.getWallet(userId, {
+          walletAddress,
+          chainType,
+        });
+
+        if (!walletForSigning) {
+          return NextResponse.json(
+            { error: "No matching wallet found" },
+            { status: 404 }
+          );
+        }
+
+        try {
+          const signature = await privyService.rawSign(
+            walletForSigning.id,
+            hash
+          );
+          return NextResponse.json({
+            ...signature,
+            walletId: walletForSigning.id,
+            chainType: walletForSigning.chainType,
+          });
+        } catch (error) {
+          console.error("Error creating raw signature:", error);
+          return NextResponse.json(
+            { error: "Failed to create signature" },
             { status: 500 }
           );
         }
+
+      case "createWallet":
+        // Create a new embedded wallet for the user on a specific chain
+        const { chainType: newChainType = "ethereum" } = body;
+
+        // Map specific chains to their base wallet types supported by Privy
+        const getBaseChainType = (chain: string): string => {
+          if (chain === "solana") return "solana";
+          if (chain === "tron") return "tron";
+          if (chain === "cosmos") return "cosmos";
+          if (chain === "stellar") return "stellar";
+          // All EVM-compatible chains use ethereum as the base type
+          return "ethereum";
+        };
+
+        const baseChainType = getBaseChainType(newChainType);
+
+        try {
+          const newWallet = await privyService.createWallet(
+            userId,
+            baseChainType
+          );
+          return NextResponse.json({
+            success: true,
+            wallet: {
+              id: newWallet.id,
+              address: newWallet.address,
+              chainType: newWallet.chainType,
+              walletClientType: "privy",
+            },
+            requestedChain: newChainType,
+            baseChainType: baseChainType,
+          });
+        } catch (error) {
+          console.error("Error creating wallet:", error);
+          return NextResponse.json(
+            {
+              error: "Failed to create wallet",
+              message: error instanceof Error ? error.message : String(error),
+              chainType: newChainType,
+              baseChainType: baseChainType,
+            },
+            { status: 500 }
+          );
+        }
+
+      case "signTransaction":
+        // Legacy action - redirect to use rawSign instead
+        return NextResponse.json(
+          {
+            error: "Use 'rawSign' action for transaction signing",
+            message:
+              "Provide the transaction hash in the 'hash' field for raw signing",
+          },
+          { status: 400 }
+        );
 
       default:
         return NextResponse.json(

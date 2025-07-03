@@ -21,21 +21,47 @@ export default function RootLayout({
       <head>
         <title>Adamik Agent</title>
         <meta name="description" content="A demo app from Adamik." />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Handle wallet extension conflicts before app loads
+              (function() {
+                if (typeof window !== 'undefined' && window.ethereum) {
+                  const originalEthereum = window.ethereum;
+                  
+                  // Prevent redefinition errors
+                  try {
+                    Object.defineProperty(window, 'ethereum', {
+                      value: originalEthereum,
+                      writable: false,
+                      configurable: false
+                    });
+                  } catch (e) {
+                    // Property already defined, continue gracefully
+                    console.log('Ethereum provider already configured');
+                  }
+                }
+              })();
+            `,
+          }}
+        />
       </head>
       <body className={`antialiased`}>
         <PrivyProvider
           appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID!}
           config={{
-            // Customize login methods
-            loginMethods: ["email", "google", "twitter"],
-            // Configure embedded wallets
+            // Simple authentication methods - Tier 2 approach
+            loginMethods: ["google", "twitter"],
+            // Configure embedded wallets (Privy handles keypair generation)
             embeddedWallets: {
               createOnLogin: "users-without-wallets", // Auto-create wallets
+              requireUserPasswordOnCreate: false, // Simplify wallet creation
             },
-            // Add appearance customization
+            // Clean appearance settings
             appearance: {
               theme: "light",
               accentColor: "#676FFF",
+              showWalletLoginFirst: false, // Prioritize social login
             },
           }}
         >

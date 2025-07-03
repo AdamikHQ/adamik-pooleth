@@ -23,7 +23,7 @@ const adamikAgentConfig = {
 You are Adamik, a real-time blockchain wallet voice assistant. Your role is to help the user manage their blockchain assets and answer questions, but you must always defer complex logic and all tool calls to your Supervisor Agent via the getNextResponseFromSupervisor tool.
 
 ## Task
-Your job is to assist users with blockchain wallet actions such as checking balances, sending assets, receiving addresses, reviewing transaction histories, and verifying metadata. You must validate asset formatting (such as the correct number of decimals per token) before giving output. You provide confirmations, summaries, and security-conscious guidance at all times.
+Your job is to assist users with blockchain wallet actions such as checking balances, sending assets, receiving addresses, reviewing transaction histories, verifying metadata, creating new wallets across multiple blockchains, and managing multi-chain wallet portfolios. You must validate asset formatting (such as the correct number of decimals per token) before giving output. You provide confirmations, summaries, and security-conscious guidance at all times.
 
 ## Demeanor
 Neutral and efficient. You don't attempt to express emotional support or enthusiasm. You operate with calm precision and clarity, designed for users who expect professional-grade tools.
@@ -120,6 +120,60 @@ const toolLogic = {
     const address = await makeWalletRequest("getAddress", {}, userContext);
     return {
       content: [{ type: "text", text: JSON.stringify(address) }],
+    };
+  },
+
+  listWallets: async (
+    _args: any,
+    _transcriptItems: any,
+    _addTranscriptBreadcrumb: any,
+    userContext?: { userId: string; walletAddress?: string }
+  ) => {
+    const wallets = await makeWalletRequest("listWallets", {}, userContext);
+    return {
+      content: [{ type: "text", text: JSON.stringify(wallets) }],
+    };
+  },
+
+  createWallet: async (
+    { chainType }: { chainType: string },
+    _transcriptItems: any,
+    _addTranscriptBreadcrumb: any,
+    userContext?: { userId: string; walletAddress?: string }
+  ) => {
+    if (!chains.includes(chainType)) {
+      throw new Error(
+        `Chain ${chainType} is not supported. Supported chains: ${chains.join(
+          ", "
+        )}`
+      );
+    }
+
+    // Map specific chains to their base wallet types supported by Privy
+    const getBaseChainType = (chain: string): string => {
+      if (chain === "solana") return "solana";
+      if (chain === "tron") return "tron";
+      if (chain === "cosmos") return "cosmos";
+      if (chain === "stellar") return "stellar";
+      // All EVM-compatible chains use ethereum as the base type
+      return "ethereum";
+    };
+
+    const baseChainType = getBaseChainType(chainType);
+    const result = await makeWalletRequest(
+      "createWallet",
+      { chainType: baseChainType },
+      userContext
+    );
+
+    // Include the requested chain in the response for context
+    if (result && typeof result === "object" && "wallet" in result) {
+      (result as any).requestedChain = chainType;
+      (result as any).baseChainType = baseChainType;
+    }
+
+    return {
+      content: [{ type: "text", text: JSON.stringify(result) }],
     };
   },
 
@@ -322,6 +376,36 @@ const chatAgent: AgentConfig = {
         type: "object",
         properties: {},
         additionalProperties: false,
+      },
+    },
+    {
+      type: "function",
+      name: "listWallets",
+      description:
+        "List all embedded wallets for the user across different blockchains",
+      parameters: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
+    },
+    {
+      type: "function",
+      name: "createWallet",
+      description:
+        "Create a new embedded wallet for a specific blockchain network. Supports creating wallets for different chain types like ethereum, solana, tron, cosmos, and stellar.",
+      parameters: {
+        type: "object",
+        properties: {
+          chainType: {
+            type: "string",
+            description:
+              "The blockchain type to create a wallet for (e.g., 'ethereum', 'solana', 'tron', 'cosmos', 'stellar'). Must be one of the supported chains.",
+            enum: chains,
+          },
+        },
+        additionalProperties: false,
+        required: ["chainType"],
       },
     },
     {
