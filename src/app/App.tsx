@@ -6,6 +6,9 @@ import { v4 as uuidv4 } from "uuid";
 
 import Image from "next/image";
 
+// Privy authentication
+import { usePrivy, useWallets } from "@privy-io/react-auth";
+
 // UI components
 import Transcript from "./components/Transcript";
 import Events from "./components/Events";
@@ -29,6 +32,10 @@ import useAudioDownload from "./hooks/useAudioDownload";
 
 function App() {
   const searchParams = useSearchParams();
+
+  // Privy authentication hooks
+  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { wallets } = useWallets();
 
   // Use urlCodec directly from URL search params (default: "opus")
   const urlCodec = searchParams.get("codec") || "opus";
@@ -64,6 +71,11 @@ function App() {
   const { startRecording, stopRecording, downloadRecording } =
     useAudioDownload();
 
+  // Get user's embedded wallet
+  const userWallet = wallets.find(
+    (wallet) => wallet.walletClientType === "privy"
+  );
+
   const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
     if (dcRef.current && dcRef.current.readyState === "open") {
       logClientEvent(eventObj, eventNameSuffix);
@@ -87,6 +99,13 @@ function App() {
     sendClientEvent,
     setSelectedAgentName,
     setIsOutputAudioBufferActive,
+    userContext:
+      authenticated && user && userWallet
+        ? {
+            userId: user.id,
+            walletAddress: userWallet.address,
+          }
+        : undefined,
   });
 
   useEffect(() => {
@@ -107,16 +126,25 @@ function App() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (selectedAgentName && sessionStatus === "DISCONNECTED") {
+    // Only connect to realtime if user is authenticated and has a wallet
+    if (
+      selectedAgentName &&
+      sessionStatus === "DISCONNECTED" &&
+      authenticated &&
+      userWallet
+    ) {
       connectToRealtime();
     }
-  }, [selectedAgentName]);
+  }, [selectedAgentName, authenticated, userWallet]);
 
   useEffect(() => {
+    // Only update session if user is authenticated and has a wallet
     if (
       sessionStatus === "CONNECTED" &&
       selectedAgentConfigSet &&
-      selectedAgentName
+      selectedAgentName &&
+      authenticated &&
+      userWallet
     ) {
       const currentAgent = selectedAgentConfigSet.find(
         (a) => a.name === selectedAgentName
@@ -124,7 +152,13 @@ function App() {
       addTranscriptBreadcrumb(`Agent: ${selectedAgentName}`, currentAgent);
       updateSession(true);
     }
-  }, [selectedAgentConfigSet, selectedAgentName, sessionStatus]);
+  }, [
+    selectedAgentConfigSet,
+    selectedAgentName,
+    sessionStatus,
+    authenticated,
+    userWallet,
+  ]);
 
   useEffect(() => {
     if (sessionStatus === "CONNECTED") {
@@ -134,6 +168,13 @@ function App() {
       updateSession();
     }
   }, [isPTTActive]);
+
+  // Disconnect when user logs out
+  useEffect(() => {
+    if (!authenticated && sessionStatus !== "DISCONNECTED") {
+      disconnectFromRealtime();
+    }
+  }, [authenticated]);
 
   const fetchEphemeralKey = async (): Promise<string | null> => {
     logClientEvent({ url: "/session" }, "fetch_session_token_request");
@@ -281,7 +322,6 @@ function App() {
     const mostRecentAssistantMessage = [...transcriptItems]
       .reverse()
       .find((item) => item.role === "assistant");
-
 
     if (!mostRecentAssistantMessage) {
       console.warn("can't cancel, no recent assistant message found");
@@ -434,6 +474,54 @@ function App() {
 
   const agentSetKey = searchParams.get("agentConfig") || "default";
 
+  // Show loading while Privy initializes
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen if not authenticated
+  if (!authenticated) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-100">
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full mx-4">
+          <div className="text-center mb-6">
+            <Image
+              src="/openai-logomark.svg"
+              alt="OpenAI Logo"
+              width={40}
+              height={40}
+              className="mx-auto mb-4"
+            />
+            <h1 className="text-2xl font-bold text-gray-900">
+              Realtime API <span className="text-gray-500">Agents</span>
+            </h1>
+            <p className="text-gray-600 mt-2">
+              Sign in to start your voice-enabled blockchain assistant
+            </p>
+          </div>
+
+          <button
+            onClick={login}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
+          >
+            Sign In
+          </button>
+
+          <p className="text-xs text-gray-500 text-center mt-4">
+            A wallet will be automatically created for you upon sign in
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
       <div className="p-5 text-lg font-semibold flex justify-between items-center">
@@ -455,6 +543,24 @@ function App() {
           </div>
         </div>
         <div className="flex items-center">
+          {/* User info and logout */}
+          <div className="flex items-center mr-4">
+            <span className="text-sm text-gray-600 mr-2">
+              {user?.email?.address || user?.phone?.number || "User"}
+            </span>
+            {userWallet && (
+              <span className="text-xs text-gray-500 mr-2">
+                {userWallet.address?.slice(0, 6)}...
+                {userWallet.address?.slice(-4)}
+              </span>
+            )}
+            <button
+              onClick={logout}
+              className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+            >
+              Logout
+            </button>
+          </div>
           <label className="flex items-center text-base gap-1 mr-2 font-medium">
             Scenario
           </label>

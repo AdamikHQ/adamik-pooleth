@@ -1,11 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import {
-  ServerEvent,
-  SessionStatus,
-  AgentConfig,
-} from "@/app/types";
+import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
 
@@ -17,6 +13,7 @@ export interface UseHandleServerEventParams {
   setSelectedAgentName: (name: string) => void;
   shouldForceResponse?: boolean;
   setIsOutputAudioBufferActive: (active: boolean) => void;
+  userContext?: { userId: string; walletAddress?: string };
 }
 
 export function useHandleServerEvent({
@@ -26,6 +23,7 @@ export function useHandleServerEvent({
   sendClientEvent,
   setSelectedAgentName,
   setIsOutputAudioBufferActive,
+  userContext,
 }: UseHandleServerEventParams) {
   const {
     transcriptItems,
@@ -53,7 +51,12 @@ export function useHandleServerEvent({
 
     if (currentAgent?.toolLogic?.[functionCallParams.name]) {
       const fn = currentAgent.toolLogic[functionCallParams.name];
-      const fnResult = await fn(args, transcriptItems, addTranscriptBreadcrumb);
+      const fnResult = await fn(
+        args,
+        transcriptItems,
+        addTranscriptBreadcrumb,
+        userContext
+      );
       addTranscriptBreadcrumb(
         `function call result: ${functionCallParams.name}`,
         fnResult
