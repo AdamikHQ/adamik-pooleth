@@ -19,8 +19,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Realtime API Agents</title>
-        <meta name="description" content="A demo app from OpenAI." />
+        <title>Adamik Agent</title>
+        <meta name="description" content="A demo app from Adamik." />
       </head>
       <body className={`antialiased`}>
         <PrivyProvider

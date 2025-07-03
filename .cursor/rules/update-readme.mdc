@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Before each commit, make sure the [README.md](mdc:README.md) is up to date with the current state of the codebase. If not ensure you update it while keeping it high level enough.

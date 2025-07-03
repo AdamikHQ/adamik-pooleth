@@ -47,102 +47,145 @@ function BottomToolbar({
   }
 
   function getConnectionButtonClasses() {
-    const baseClasses = "text-white text-base p-2 w-36 rounded-md h-full";
-    const cursorClass = isConnecting ? "cursor-not-allowed" : "cursor-pointer";
+    const baseClasses =
+      "flex items-center justify-center px-6 py-3 text-sm font-medium rounded-xl transition-all duration-200 min-w-[120px]";
 
     if (isConnected) {
-      // Connected -> label "Disconnect" -> red
-      return `bg-red-600 hover:bg-red-700 ${cursorClass} ${baseClasses}`;
+      return `${baseClasses} bg-red-500 hover:bg-red-600 text-white shadow-md hover:shadow-lg`;
     }
-    // Disconnected or connecting -> label is either "Connect" or "Connecting" -> black
-    return `bg-black hover:bg-gray-900 ${cursorClass} ${baseClasses}`;
+    if (isConnecting) {
+      return `${baseClasses} bg-gray-400 text-white cursor-not-allowed`;
+    }
+    return `${baseClasses} bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg`;
   }
 
   return (
-    <div className="p-4 flex flex-row items-center justify-center gap-x-8">
-      <button
-        onClick={onToggleConnection}
-        className={getConnectionButtonClasses()}
-        disabled={isConnecting}
-      >
-        {getConnectionButtonLabel()}
-      </button>
+    <footer className="bg-white border-t border-gray-200 px-6 py-4 max-md:px-4 max-md:py-3">
+      <div className="flex items-center justify-between max-w-7xl mx-auto max-lg:flex-col max-lg:space-y-4 max-lg:items-stretch">
+        {/* Connection Control */}
+        <div className="flex items-center max-lg:justify-center">
+          <button
+            onClick={onToggleConnection}
+            className={getConnectionButtonClasses()}
+            disabled={isConnecting}
+          >
+            {isConnecting && (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2"></div>
+            )}
+            {getConnectionButtonLabel()}
+          </button>
+        </div>
 
-      <div className="flex flex-row items-center gap-2">
-        <input
-          id="push-to-talk"
-          type="checkbox"
-          checked={isPTTActive}
-          onChange={(e) => setIsPTTActive(e.target.checked)}
-          disabled={!isConnected}
-          className="w-4 h-4"
-        />
-        <label
-          htmlFor="push-to-talk"
-          className="flex items-center cursor-pointer"
-        >
-          Push to talk
-        </label>
-        <button
-          onMouseDown={handleTalkButtonDown}
-          onMouseUp={handleTalkButtonUp}
-          onTouchStart={handleTalkButtonDown}
-          onTouchEnd={handleTalkButtonUp}
-          disabled={!isPTTActive}
-          className={
-            (isPTTUserSpeaking ? "bg-gray-300" : "bg-gray-200") +
-            " py-1 px-4 cursor-pointer rounded-md" +
-            (!isPTTActive ? " bg-gray-100 text-gray-400" : "")
-          }
-        >
-          Talk
-        </button>
-      </div>
+        {/* Audio Controls */}
+        <div className="flex items-center space-x-8 max-md:space-x-4 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-4">
+          {/* Push to Talk */}
+          <div className="flex items-center space-x-4 bg-gray-50 px-4 py-2 rounded-xl max-sm:w-full max-sm:justify-between">
+            <div className="flex items-center space-x-2">
+              <input
+                id="push-to-talk"
+                type="checkbox"
+                checked={isPTTActive}
+                onChange={(e) => setIsPTTActive(e.target.checked)}
+                disabled={!isConnected}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <label
+                htmlFor="push-to-talk"
+                className="text-sm font-medium text-gray-700 cursor-pointer"
+              >
+                Push to talk
+              </label>
+            </div>
+            <button
+              onMouseDown={handleTalkButtonDown}
+              onMouseUp={handleTalkButtonUp}
+              onTouchStart={handleTalkButtonDown}
+              onTouchEnd={handleTalkButtonUp}
+              disabled={!isPTTActive}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                isPTTUserSpeaking
+                  ? "bg-blue-600 text-white shadow-md"
+                  : isPTTActive
+                  ? "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                  : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {isPTTUserSpeaking ? "Speaking..." : "Talk"}
+            </button>
+          </div>
 
-      <div className="flex flex-row items-center gap-1">
-        <input
-          id="audio-playback"
-          type="checkbox"
-          checked={isAudioPlaybackEnabled}
-          onChange={(e) => setIsAudioPlaybackEnabled(e.target.checked)}
-          disabled={!isConnected}
-          className="w-4 h-4"
-        />
-        <label
-          htmlFor="audio-playback"
-          className="flex items-center cursor-pointer"
-        >
-          Audio playback
-        </label>
-      </div>
+          {/* Audio Playback */}
+          <div className="flex items-center space-x-2">
+            <input
+              id="audio-playback"
+              type="checkbox"
+              checked={isAudioPlaybackEnabled}
+              onChange={(e) => setIsAudioPlaybackEnabled(e.target.checked)}
+              disabled={!isConnected}
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+            />
+            <label
+              htmlFor="audio-playback"
+              className="text-sm font-medium text-gray-700 cursor-pointer"
+            >
+              Audio playback
+            </label>
+          </div>
+        </div>
 
-      <div className="flex flex-row items-center gap-2">
-        <input
-          id="logs"
-          type="checkbox"
-          checked={isEventsPaneExpanded}
-          onChange={(e) => setIsEventsPaneExpanded(e.target.checked)}
-          className="w-4 h-4"
-        />
-        <label htmlFor="logs" className="flex items-center cursor-pointer">
-          Logs
-        </label>
-      </div>
+        {/* Settings and View Controls */}
+        <div className="flex items-center space-x-6 max-md:space-x-4 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-4 max-sm:w-full">
+          {/* Logs Toggle */}
+          <div className="flex items-center space-x-2 max-sm:justify-center">
+            <input
+              id="logs"
+              type="checkbox"
+              checked={isEventsPaneExpanded}
+              onChange={(e) => setIsEventsPaneExpanded(e.target.checked)}
+              className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+            />
+            <label
+              htmlFor="logs"
+              className="text-sm font-medium text-gray-700 cursor-pointer"
+            >
+              Show Logs
+            </label>
+          </div>
 
-      <div className="flex flex-row items-center gap-2">
-        <div>Codec:</div>
-        <select
-          id="codec-select"
-          value={codec}
-          onChange={handleCodecChange}
-          className="border border-gray-300 rounded-md px-2 py-1 focus:outline-none cursor-pointer"
-        >
-          <option value="opus">Opus (48 kHz)</option>
-          <option value="pcmu">PCMU (8 kHz)</option>
-          <option value="pcma">PCMA (8 kHz)</option>
-        </select>
+          {/* Codec Selection */}
+          <div className="flex items-center space-x-3 max-sm:w-full">
+            <label className="text-sm font-medium text-gray-700 max-sm:w-16 max-sm:flex-shrink-0">
+              Codec
+            </label>
+            <div className="relative max-sm:flex-1">
+              <select
+                id="codec-select"
+                value={codec}
+                onChange={handleCodecChange}
+                className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[140px] max-sm:w-full max-sm:min-w-0"
+              >
+                <option value="opus">Opus (48 kHz)</option>
+                <option value="pcmu">PCMU (8 kHz)</option>
+                <option value="pcma">PCMA (8 kHz)</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                <svg
+                  className="h-4 w-4"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </footer>
   );
 }
 

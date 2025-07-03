@@ -489,141 +489,189 @@ function App() {
   // Show login screen if not authenticated
   if (!authenticated) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-100">
-        <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full mx-4">
-          <div className="text-center mb-6">
-            <Image
-              src="/openai-logomark.svg"
-              alt="OpenAI Logo"
-              width={40}
-              height={40}
-              className="mx-auto mb-4"
-            />
-            <h1 className="text-2xl font-bold text-gray-900">
-              Realtime API <span className="text-gray-500">Agents</span>
-            </h1>
-            <p className="text-gray-600 mt-2">
-              Sign in to start your voice-enabled blockchain assistant
-            </p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
+        <div className="bg-white/80 backdrop-blur-sm p-10 rounded-3xl shadow-2xl max-w-md w-full border border-gray-200">
+          <div className="text-center">
+            {/* Logo */}
+            <div className="mb-8">
+              <Image
+                src="/Adamik_logo_flat_blue.svg"
+                alt="Adamik Agent"
+                width={200}
+                height={42}
+                className="mx-auto h-12 w-auto"
+              />
+            </div>
+
+            {/* Welcome Text */}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-gray-900 mb-3">
+                Welcome to Adamik Agent
+              </h1>
+              <p className="text-gray-600 leading-relaxed">
+                Your voice-enabled blockchain assistant. Sign in to get started
+                with automated blockchain interactions.
+              </p>
+            </div>
+
+            {/* Sign In Button */}
+            <button
+              onClick={login}
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+            >
+              Sign In to Continue
+            </button>
+
+            {/* Info Text */}
+            <div className="mt-6 p-4 bg-blue-50 rounded-xl">
+              <p className="text-sm text-blue-700 font-medium mb-1">
+                🔐 Secure Wallet Creation
+              </p>
+              <p className="text-xs text-blue-600">
+                A secure embedded wallet will be automatically created for you
+                upon sign in
+              </p>
+            </div>
+
+            {/* Features */}
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center text-sm text-gray-600">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                Voice-enabled blockchain interactions
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                Secure embedded wallet management
+              </div>
+              <div className="flex items-center text-sm text-gray-600">
+                <div className="w-2 h-2 bg-green-500 rounded-full mr-3"></div>
+                Real-time blockchain assistant
+              </div>
+            </div>
           </div>
-
-          <button
-            onClick={login}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            Sign In
-          </button>
-
-          <p className="text-xs text-gray-500 text-center mt-4">
-            A wallet will be automatically created for you upon sign in
-          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="text-base flex flex-col h-screen bg-gray-100 text-gray-800 relative">
-      <div className="p-5 text-lg font-semibold flex justify-between items-center">
-        <div
-          className="flex items-center cursor-pointer"
-          onClick={() => window.location.reload()}
-        >
-          <div>
+    <div className="text-base flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-800 relative">
+      {/* Modern Header */}
+      <header className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="px-6 py-4 flex justify-between items-center max-md:px-4 max-sm:flex-col max-sm:space-y-4 max-sm:items-stretch">
+          {/* Logo Section */}
+          <div
+            className="flex items-center cursor-pointer hover:opacity-80 transition-opacity max-sm:justify-center"
+            onClick={() => window.location.reload()}
+          >
             <Image
-              src="/openai-logomark.svg"
-              alt="OpenAI Logo"
-              width={20}
-              height={20}
-              className="mr-2"
+              src="/Adamik_logo_flat_blue.svg"
+              alt="Adamik Agent"
+              width={140}
+              height={29}
+              className="h-8 w-auto"
             />
           </div>
-          <div>
-            Realtime API <span className="text-gray-500">Agents</span>
-          </div>
-        </div>
-        <div className="flex items-center">
-          {/* User info and logout */}
-          <div className="flex items-center mr-4">
-            <span className="text-sm text-gray-600 mr-2">
-              {user?.email?.address || user?.phone?.number || "User"}
-            </span>
-            {userWallet && (
-              <span className="text-xs text-gray-500 mr-2">
-                {userWallet.address?.slice(0, 6)}...
-                {userWallet.address?.slice(-4)}
-              </span>
-            )}
-            <button
-              onClick={logout}
-              className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
-            >
-              Logout
-            </button>
-          </div>
-          <label className="flex items-center text-base gap-1 mr-2 font-medium">
-            Scenario
-          </label>
-          <div className="relative inline-block">
-            <select
-              value={agentSetKey}
-              onChange={handleAgentChange}
-              className="appearance-none border border-gray-300 rounded-lg text-base px-2 py-1 pr-8 cursor-pointer font-normal focus:outline-none"
-            >
-              {Object.keys(allAgentSets).map((agentKey) => (
-                <option key={agentKey} value={agentKey}>
-                  {agentKey}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-600">
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                <path
-                  fillRule="evenodd"
-                  d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </div>
-          </div>
 
-          {agentSetKey && (
-            <div className="flex items-center ml-6">
-              <label className="flex items-center text-base gap-1 mr-2 font-medium">
-                Agent
-              </label>
-              <div className="relative inline-block">
-                <select
-                  value={selectedAgentName}
-                  onChange={handleSelectedAgentChange}
-                  className="appearance-none border border-gray-300 rounded-lg text-base px-2 py-1 pr-8 cursor-pointer font-normal focus:outline-none"
-                >
-                  {selectedAgentConfigSet?.map((agent) => (
-                    <option key={agent.name} value={agent.name}>
-                      {agent.name}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2 text-gray-600">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
+          {/* Controls Section */}
+          <div className="flex items-center space-x-6 max-lg:space-x-4 max-md:space-x-3 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-3">
+            {/* Scenario and Agent Selection */}
+            <div className="flex items-center space-x-6 max-lg:space-x-4 max-md:space-x-3 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-3">
+              {/* Scenario Selection */}
+              <div className="flex items-center space-x-3 max-sm:w-full">
+                <label className="text-sm font-medium text-gray-700 max-sm:w-20 max-sm:flex-shrink-0">
+                  Scenario
+                </label>
+                <div className="relative max-sm:flex-1">
+                  <select
+                    value={agentSetKey}
+                    onChange={handleAgentChange}
+                    className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:w-full"
                   >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                    {Object.keys(allAgentSets).map((agentKey) => (
+                      <option key={agentKey} value={agentKey}>
+                        {agentKey}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      </div>
 
-      <div className="flex flex-1 gap-2 px-2 overflow-hidden relative">
+              {/* Agent Selection */}
+              {agentSetKey && (
+                <div className="flex items-center space-x-3 max-sm:w-full">
+                  <label className="text-sm font-medium text-gray-700 max-sm:w-20 max-sm:flex-shrink-0">
+                    Agent
+                  </label>
+                  <div className="relative max-sm:flex-1">
+                    <select
+                      value={selectedAgentName}
+                      onChange={handleSelectedAgentChange}
+                      className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:w-full"
+                    >
+                      {selectedAgentConfigSet?.map((agent) => (
+                        <option key={agent.name} value={agent.name}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                      <svg
+                        className="h-4 w-4"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* User Information */}
+            <div className="flex items-center space-x-4 pl-4 border-l border-gray-200 max-sm:pl-0 max-sm:border-l-0 max-sm:border-t max-sm:pt-3 max-sm:w-full max-sm:justify-between">
+              <div className="text-right max-sm:text-left">
+                <div className="text-sm font-medium text-gray-700">
+                  {user?.email?.address || user?.phone?.number || "User"}
+                </div>
+                {userWallet && (
+                  <div className="text-xs text-gray-500 font-mono">
+                    {userWallet.address?.slice(0, 6)}...
+                    {userWallet.address?.slice(-4)}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={logout}
+                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 gap-6 p-6 overflow-hidden max-md:gap-4 max-md:p-4 max-sm:flex-col">
         <Transcript
           userText={userText}
           setUserText={setUserText}

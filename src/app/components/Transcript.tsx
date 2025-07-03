@@ -71,32 +71,33 @@ function Transcript({
   };
 
   return (
-    <div className="flex flex-col flex-1 bg-white min-h-0 rounded-xl">
+    <div className="flex flex-col flex-1 bg-white min-h-0 rounded-2xl shadow-lg border border-gray-200">
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="flex items-center justify-between px-6 py-3 sticky top-0 z-10 text-base border-b bg-white rounded-t-xl">
-          <span className="font-semibold">Transcript</span>
-          <div className="flex gap-x-2">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 sticky top-0 z-10 bg-white border-b border-gray-100 rounded-t-2xl">
+          <h2 className="text-lg font-semibold text-gray-800">Conversation</h2>
+          <div className="flex items-center space-x-3">
             <button
               onClick={handleCopyTranscript}
-              className="w-24 text-sm px-3 py-1 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center gap-x-1"
+              className="flex items-center space-x-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <ClipboardCopyIcon />
-              {justCopied ? "Copied!" : "Copy"}
+              <ClipboardCopyIcon className="w-4 h-4" />
+              <span>{justCopied ? "Copied!" : "Copy"}</span>
             </button>
             <button
               onClick={downloadRecording}
-              className="w-40 text-sm px-3 py-1 rounded-md bg-gray-200 hover:bg-gray-300 flex items-center justify-center gap-x-1"
+              className="flex items-center space-x-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <DownloadIcon />
+              <DownloadIcon className="w-4 h-4" />
               <span>Download Audio</span>
             </button>
           </div>
         </div>
 
-        {/* Transcript Content */}
+        {/* Messages Container */}
         <div
           ref={transcriptRef}
-          className="overflow-auto p-4 flex flex-col gap-y-4 h-full"
+          className="overflow-auto p-6 flex flex-col gap-y-6 h-full scroll-smooth"
         >
           {transcriptItems.map((item) => {
             const {
@@ -117,16 +118,14 @@ function Transcript({
 
             if (type === "MESSAGE") {
               const isUser = role === "user";
-              const containerClasses = `flex justify-end flex-col ${
-                isUser ? "items-end" : "items-start"
-              }`;
-              const bubbleBase = `max-w-lg p-3 ${
-                isUser ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-black"
-              }`;
+              const containerClasses = `flex ${
+                isUser ? "justify-end" : "justify-start"
+              } mb-1`;
+
               const isBracketedMessage =
                 title.startsWith("[") && title.endsWith("]");
               const messageStyle = isBracketedMessage
-                ? "italic text-gray-400"
+                ? "italic text-gray-500"
                 : "";
               const displayTitle = isBracketedMessage
                 ? title.slice(1, -1)
@@ -134,26 +133,68 @@ function Transcript({
 
               return (
                 <div key={itemId} className={containerClasses}>
-                  <div className="max-w-lg">
+                  <div className={`max-w-lg ${isUser ? "ml-12" : "mr-12"}`}>
+                    {/* Message Bubble */}
                     <div
-                      className={`${bubbleBase} rounded-t-xl ${
-                        guardrailResult ? "" : "rounded-b-xl"
-                      }`}
+                      className={`px-4 py-3 rounded-2xl ${
+                        isUser
+                          ? "bg-blue-600 text-white rounded-br-lg"
+                          : "bg-gray-100 text-gray-800 rounded-bl-lg"
+                      } ${guardrailResult ? "rounded-b-lg" : ""} shadow-sm`}
                     >
-                      <div
-                        className={`text-xs ${
-                          isUser ? "text-gray-400" : "text-gray-500"
-                        } font-mono`}
-                      >
-                        {timestamp}
-                      </div>
-                      <div className={`whitespace-pre-wrap ${messageStyle}`}>
-                        <ReactMarkdown>{displayTitle}</ReactMarkdown>
+                      <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        <ReactMarkdown
+                          className={messageStyle}
+                          components={{
+                            p: ({ children }) => (
+                              <p className="mb-2 last:mb-0">{children}</p>
+                            ),
+                            code: ({ children }) => (
+                              <code
+                                className={`px-1 py-0.5 rounded text-xs font-mono ${
+                                  isUser ? "bg-blue-500" : "bg-gray-200"
+                                }`}
+                              >
+                                {children}
+                              </code>
+                            ),
+                            pre: ({ children }) => (
+                              <pre
+                                className={`p-3 rounded-lg text-xs font-mono overflow-x-auto ${
+                                  isUser ? "bg-blue-500" : "bg-gray-200"
+                                }`}
+                              >
+                                {children}
+                              </pre>
+                            ),
+                          }}
+                        >
+                          {displayTitle}
+                        </ReactMarkdown>
                       </div>
                     </div>
+
+                    {/* Timestamp */}
+                    <div
+                      className={`mt-1 px-2 ${
+                        isUser ? "text-right" : "text-left"
+                      }`}
+                    >
+                      <span className="text-xs text-gray-400 font-mono">
+                        {timestamp}
+                      </span>
+                    </div>
+
+                    {/* Guardrail Result */}
                     {guardrailResult && (
-                      <div className="bg-gray-200 px-3 py-2 rounded-b-xl">
-                        <GuardrailChip guardrailResult={guardrailResult} />
+                      <div
+                        className={`mt-2 ${
+                          isUser ? "text-right" : "text-left"
+                        }`}
+                      >
+                        <div className="inline-block bg-yellow-50 border border-yellow-200 px-3 py-2 rounded-xl">
+                          <GuardrailChip guardrailResult={guardrailResult} />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -163,44 +204,60 @@ function Transcript({
               return (
                 <div
                   key={itemId}
-                  className="flex flex-col justify-start items-start text-gray-500 text-sm"
+                  className="flex flex-col justify-center items-center text-gray-500 text-sm my-4"
                 >
-                  <span className="text-xs font-mono">{timestamp}</span>
-                  <div
-                    className={`whitespace-pre-wrap flex items-center font-mono text-sm text-gray-800 ${
-                      data ? "cursor-pointer" : ""
-                    }`}
-                    onClick={() => data && toggleTranscriptItemExpand(itemId)}
-                  >
-                    {data && (
-                      <span
-                        className={`text-gray-400 mr-1 transform transition-transform duration-200 select-none font-mono ${
-                          expanded ? "rotate-90" : "rotate-0"
-                        }`}
-                      >
-                        ▶
+                  <div className="bg-gray-50 px-4 py-2 rounded-full border border-gray-200">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-mono text-gray-400">
+                        {timestamp}
                       </span>
-                    )}
-                    {title}
+                      <div
+                        className={`flex items-center text-sm font-medium text-gray-600 ${
+                          data ? "cursor-pointer hover:text-gray-800" : ""
+                        }`}
+                        onClick={() =>
+                          data && toggleTranscriptItemExpand(itemId)
+                        }
+                      >
+                        {data && (
+                          <span
+                            className={`text-gray-400 mr-2 transform transition-transform duration-200 select-none ${
+                              expanded ? "rotate-90" : "rotate-0"
+                            }`}
+                          >
+                            ▶
+                          </span>
+                        )}
+                        {title}
+                      </div>
+                    </div>
                   </div>
                   {expanded && data && (
-                    <div className="text-gray-800 text-left">
-                      <pre className="border-l-2 ml-1 border-gray-200 whitespace-pre-wrap break-words font-mono text-xs mb-2 mt-2 pl-2">
-                        {JSON.stringify(data, null, 2)}
-                      </pre>
+                    <div className="mt-4 w-full max-w-2xl">
+                      <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                        <pre className="text-xs font-mono text-gray-700 whitespace-pre-wrap break-words overflow-x-auto">
+                          {JSON.stringify(data, null, 2)}
+                        </pre>
+                      </div>
                     </div>
                   )}
                 </div>
               );
             } else {
-              // Fallback if type is neither MESSAGE nor BREADCRUMB
+              // Fallback for unknown types
               return (
                 <div
                   key={itemId}
-                  className="flex justify-center text-gray-500 text-sm italic font-mono"
+                  className="flex justify-center items-center my-2"
                 >
-                  Unknown item type: {type}{" "}
-                  <span className="ml-2 text-xs">{timestamp}</span>
+                  <div className="bg-red-50 border border-red-200 px-4 py-2 rounded-xl">
+                    <span className="text-sm text-red-600 font-medium">
+                      Unknown item type: {type}
+                    </span>
+                    <span className="ml-2 text-xs text-red-400">
+                      {timestamp}
+                    </span>
+                  </div>
                 </div>
               );
             }
@@ -208,27 +265,30 @@ function Transcript({
         </div>
       </div>
 
-      <div className="p-4 flex items-center gap-x-2 flex-shrink-0 border-t border-gray-200">
-        <input
-          ref={inputRef}
-          type="text"
-          value={userText}
-          onChange={(e) => setUserText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && canSend) {
-              onSendMessage();
-            }
-          }}
-          className="flex-1 px-4 py-2 focus:outline-none"
-          placeholder="Type a message..."
-        />
-        <button
-          onClick={onSendMessage}
-          disabled={!canSend || !userText.trim()}
-          className="bg-gray-900 text-white rounded-full px-2 py-2 disabled:opacity-50"
-        >
-          <Image src="arrow.svg" alt="Send" width={24} height={24} />
-        </button>
+      {/* Message Input */}
+      <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+        <div className="flex items-center space-x-4 bg-white rounded-2xl border border-gray-200 px-4 py-3 shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+          <input
+            ref={inputRef}
+            type="text"
+            value={userText}
+            onChange={(e) => setUserText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSend) {
+                onSendMessage();
+              }
+            }}
+            className="flex-1 px-2 py-2 text-sm bg-transparent border-none outline-none placeholder-gray-400"
+            placeholder="Type your message..."
+          />
+          <button
+            onClick={onSendMessage}
+            disabled={!canSend || !userText.trim()}
+            className="flex items-center justify-center w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+          >
+            <Image src="arrow.svg" alt="Send" width={20} height={20} />
+          </button>
+        </div>
       </div>
     </div>
   );
