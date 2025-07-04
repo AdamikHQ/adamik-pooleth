@@ -5,6 +5,7 @@ import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSignRawHash } from "@privy-io/react-auth/extended-chains";
 
 export interface UseHandleServerEventParams {
   setSessionStatus: (status: SessionStatus) => void;
@@ -37,7 +38,8 @@ export function useHandleServerEvent({
   } = useTranscript();
 
   const { logServerEvent } = useEvent();
-  const { user, signMessage } = usePrivy();
+  const { user } = usePrivy();
+  const { signRawHash } = useSignRawHash();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
 
@@ -98,13 +100,13 @@ export function useHandleServerEvent({
 
           if (result.type === "signing_request" && result.data) {
             console.log(
-              "[handleFunctionCall] Processing signing request directly with Privy"
+              "[handleFunctionCall] Processing signing request directly with Privy signRawHash"
             );
 
-            // Check if user is authenticated and signMessage is available
-            if (!user || !signMessage) {
+            // Check if user is authenticated and signRawHash is available
+            if (!user || !signRawHash) {
               const errorMessage =
-                "User not authenticated or signing not available";
+                "User not authenticated or signRawHash not available";
               console.error("[handleFunctionCall]", errorMessage);
               sendClientEvent({
                 type: "conversation.item.create",
@@ -119,21 +121,38 @@ export function useHandleServerEvent({
             }
 
             try {
-              console.log("🔐 Starting direct Privy signing...");
+              console.log("🔐 Starting direct Privy signRawHash...");
               console.log("Transaction to sign:", result.data);
+
+              // Get the wallet address from user context or the signing request
+              const walletAddress =
+                userContext?.walletAddress ||
+                result.data.encodedTransaction?.senderAddress ||
+                result.data.encodedTransaction?.transaction?.data
+                  ?.senderAddress;
+
+              if (!walletAddress) {
+                throw new Error("No wallet address available for signing");
+              }
 
               // Prepare the hash for signing
               let hashToSign = result.data.hashToSign;
 
-              // Ensure the hash has 0x prefix for Ethereum-like chains
+              // Ensure the hash has 0x prefix for all chains
               if (!hashToSign.startsWith("0x")) {
                 hashToSign = "0x" + hashToSign;
               }
 
               console.log("Hash to sign:", hashToSign);
+              console.log("Wallet address:", walletAddress);
+              console.log("Chain type:", result.data.chainType);
 
-              // Sign the transaction hash using Privy's signMessage directly
-              const signResult = await signMessage({ message: hashToSign });
+              // Sign the transaction hash using Privy's signRawHash
+              const signResult = await signRawHash({
+                address: walletAddress,
+                chainType: result.data.chainType,
+                hash: hashToSign,
+              });
 
               console.log("✅ Transaction signed successfully:", signResult);
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { useSignRawHash } from "@privy-io/react-auth/extended-chains";
 
 interface SigningRequest {
   chainId: string;
@@ -23,7 +24,8 @@ export function TransactionSigner({
   onSignatureComplete,
   onSignatureCancel,
 }: TransactionSignerProps) {
-  const { user, signMessage } = usePrivy();
+  const { user } = usePrivy();
+  const { signRawHash } = useSignRawHash();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,8 +35,8 @@ export function TransactionSigner({
   }
 
   const handleSign = async () => {
-    if (!user || !signMessage) {
-      setError("User not authenticated or signing not available");
+    if (!user || !signRawHash) {
+      setError("User not authenticated or signRawHash not available");
       return;
     }
 
@@ -45,20 +47,33 @@ export function TransactionSigner({
       console.log("🔐 Starting client-side transaction signing...");
       console.log("Transaction to sign:", signingRequest);
 
+      // Get the wallet address from the encoded transaction
+      const walletAddress =
+        signingRequest.encodedTransaction?.senderAddress ||
+        signingRequest.encodedTransaction?.transaction?.data?.senderAddress;
+
+      if (!walletAddress) {
+        throw new Error("No wallet address available for signing");
+      }
+
       // Prepare the hash for signing
       let hashToSign = signingRequest.hashToSign;
 
-      // Ensure the hash has 0x prefix for Ethereum-like chains
+      // Ensure the hash has 0x prefix for all chains
       if (!hashToSign.startsWith("0x")) {
         hashToSign = "0x" + hashToSign;
       }
 
       console.log("Hash to sign:", hashToSign);
+      console.log("Wallet address:", walletAddress);
+      console.log("Chain type:", signingRequest.chainType);
 
-      // Sign the transaction hash using Privy's signMessage
-      // Note: For production, you might want to use a more specific signing method
-      // depending on the chain type (e.g., Solana vs Ethereum)
-      const signResult = await signMessage({ message: hashToSign });
+      // Sign the transaction hash using Privy's signRawHash
+      const signResult = await signRawHash({
+        address: walletAddress,
+        chainType: signingRequest.chainType,
+        hash: hashToSign,
+      });
 
       console.log("✅ Transaction signed successfully:", signResult);
 
