@@ -5,6 +5,7 @@ import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
 import { useSendTransaction } from "@privy-io/react-auth";
+import { stringToChainId } from "@/app/config/privyChains";
 
 export interface UseHandleServerEventParams {
   setSessionStatus: (status: SessionStatus) => void;
@@ -109,10 +110,21 @@ export function useHandleServerEvent({
                 throw new Error("No transaction value found");
               }
 
+              // Map string chainId to numeric chain ID for Privy using centralized config
+              const numericChainId = stringToChainId[chainId];
+              if (!numericChainId) {
+                throw new Error(
+                  `Chain ID "${chainId}" is not supported. Supported chains: ${Object.keys(
+                    stringToChainId
+                  ).join(", ")}`
+                );
+              }
+
               // Build transaction request for Privy
               const transactionRequest = {
                 to,
                 value: value.toString(),
+                chainId: numericChainId, // ✅ Use numeric chain ID for Privy
                 ...(data && { data }),
                 ...(gasLimit && { gasLimit }),
               };

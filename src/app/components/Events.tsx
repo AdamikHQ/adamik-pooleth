@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect } from "react";
 import { useEvent } from "@/app/contexts/EventContext";
 import { LoggedEvent } from "@/app/types";
 
@@ -9,8 +9,8 @@ export interface EventsProps {
 }
 
 function Events({ isExpanded }: EventsProps) {
-  const [prevEventLogs, setPrevEventLogs] = useState<LoggedEvent[]>([]);
   const eventLogsContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevEventCountRef = useRef(0);
 
   const { loggedEvents, toggleExpand } = useEvent();
 
@@ -23,15 +23,16 @@ function Events({ isExpanded }: EventsProps) {
   };
 
   useEffect(() => {
-    const hasNewEvent = loggedEvents.length > prevEventLogs.length;
+    const hasNewEvent = loggedEvents.length > prevEventCountRef.current;
 
     if (isExpanded && hasNewEvent && eventLogsContainerRef.current) {
       eventLogsContainerRef.current.scrollTop =
         eventLogsContainerRef.current.scrollHeight;
     }
 
-    setPrevEventLogs(loggedEvents);
-  }, [loggedEvents, isExpanded]);
+    // Update ref with current count
+    prevEventCountRef.current = loggedEvents.length;
+  }, [loggedEvents.length, isExpanded]); // Only depend on length, not the array itself
 
   return (
     <div

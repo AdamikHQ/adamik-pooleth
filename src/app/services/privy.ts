@@ -26,6 +26,69 @@ class PrivyService {
   }
 
   /**
+   * Helper function to identify EVM-compatible chains
+   * All EVM chains should use the same ethereum wallet
+   */
+  private isEvmChain(chainType: string): boolean {
+    const evmChains = [
+      "ethereum",
+      "polygon",
+      "arbitrum",
+      "optimism",
+      "base",
+      "bsc",
+      "avalanche",
+      "zksync",
+      "linea",
+      "gnosis",
+      "moonbeam",
+      "fantom",
+      "mantle",
+      "cronos",
+      "world-chain",
+      "sepolia",
+      "holesky",
+      "base-sepolia",
+      "polygon-amoy",
+      "arbitrum-sepolia",
+      "optimism-sepolia",
+      "bsc-testnet",
+      "avalanche-fuji",
+      "zksync-sepolia",
+      "linea-sepolia",
+      "gnosis-chiado",
+      "moonriver",
+      "moonbase",
+      "rootstock",
+      "rootstock-testnet",
+      "chiliz",
+      "chiliz-testnet",
+      "monad-testnet",
+      "berachain",
+      "berachain-bepolia",
+      "injective-evm-testnet",
+    ];
+
+    return evmChains.includes(chainType.toLowerCase());
+  }
+
+  /**
+   * Normalize chain type to the base wallet type
+   * All EVM chains map to "ethereum"
+   * Non-EVM chains are rejected (EVM-only policy)
+   */
+  private normalizeChainType(chainType: string): string {
+    if (this.isEvmChain(chainType)) {
+      return "ethereum";
+    }
+
+    // Reject non-EVM chains
+    throw new Error(
+      `Non-EVM chain '${chainType}' is not supported. Only EVM-compatible chains are allowed.`
+    );
+  }
+
+  /**
    * Get user details from Privy
    */
   async getUser(userId: string) {
@@ -40,12 +103,13 @@ class PrivyService {
 
   /**
    * Get all embedded wallets for a user
+   * FILTERED: Only returns EVM-compatible wallets for voice agent consistency
    */
   async getUserWallets(userId: string): Promise<PrivyWallet[]> {
     const user = await this.getUser(userId);
 
     console.log("🔍 Looking for embedded wallets...");
-    const wallets = user.linkedAccounts
+    const allWallets = user.linkedAccounts
       .filter(
         (account: any) =>
           account.type === "wallet" && account.walletClientType === "privy"
@@ -63,19 +127,35 @@ class PrivyService {
         };
       });
 
-    console.log("🔍 Found embedded wallets:", {
-      count: wallets.length,
-      wallets: wallets.map((w) => ({
+    // Filter to only show EVM-compatible wallets to users
+    const evmWallets = allWallets.filter((wallet) =>
+      this.isEvmChain(wallet.chainType)
+    );
+
+    console.log("🔍 All wallets found:", {
+      total: allWallets.length,
+      evm: evmWallets.length,
+      filtered: allWallets.length - evmWallets.length,
+      allWallets: allWallets.map((w) => ({
         chainType: w.chainType,
         address: w.address,
       })),
     });
 
-    return wallets;
+    console.log("🔍 EVM wallets returned to user:", {
+      count: evmWallets.length,
+      wallets: evmWallets.map((w) => ({
+        chainType: w.chainType,
+        address: w.address,
+      })),
+    });
+
+    return evmWallets;
   }
 
   /**
    * Get a specific wallet by address or chain type
+   * All EVM chains will return the same ethereum wallet
    */
   async getWallet(
     userId: string,
@@ -91,9 +171,12 @@ class PrivyService {
     let targetWallet: PrivyWallet | null = null;
 
     if (options?.chainType) {
-      // Find wallets of the specified chain type
+      // Normalize chain type - all EVM chains map to ethereum
+      const normalizedChainType = this.normalizeChainType(options.chainType);
+
+      // Find ethereum wallet (which serves all EVM chains)
       const chainWallets = wallets.filter(
-        (w) => w.chainType === options.chainType
+        (w) => w.chainType === normalizedChainType
       );
 
       // Prefer wallets with proper IDs (not addresses)
@@ -105,21 +188,17 @@ class PrivyService {
         null;
 
       console.log(
-        `🔍 Looking for ${options.chainType} wallet:`,
+        `🔍 Looking for ${options.chainType} wallet (normalized to ${normalizedChainType}):`,
         targetWallet ? "✅ Found" : "❌ Not found"
       );
 
-      if (targetWallet && chainWallets.length > 1) {
-        console.log(
-          `🔍 Found ${chainWallets.length} ${options.chainType} wallets, selected:`,
-          {
-            id: targetWallet.id,
-            address: targetWallet.address,
-            hasProperID:
-              !targetWallet.id.startsWith("0x") &&
-              !targetWallet.id.includes("1"),
-          }
-        );
+      if (targetWallet) {
+        console.log(`🔍 Using ethereum wallet for ${options.chainType}:`, {
+          id: targetWallet.id,
+          address: targetWallet.address,
+          requestedChain: options.chainType,
+          walletChainType: targetWallet.chainType,
+        });
       }
     } else if (options?.walletAddress) {
       targetWallet =
@@ -141,26 +220,35 @@ class PrivyService {
   }
 
   /**
-   * Create a new embedded wallet for a user on a specific chain
-   * Enforces one wallet per chain per user: returns existing wallet if present.
+   * Create a new embedded wallet for a user
+   * EVM-ONLY POLICY: Only creates ethereum wallets that work for all EVM chains
    * Returns { wallet, alreadyExisted } to indicate if a new wallet was created.
    */
   async createWallet(
     userId: string,
     chainType: string = "ethereum"
   ): Promise<{ wallet: PrivyWallet; alreadyExisted: boolean }> {
-    // 1. Check for existing wallet
-    const existingWallet = await this.getWallet(userId, { chainType });
+    console.log(`🔍 Wallet creation request for chain: ${chainType}`);
+
+    // Normalize chain type - all EVM chains map to ethereum, reject non-EVM
+    const normalizedChainType = this.normalizeChainType(chainType);
+
+    console.log(`🔍 Normalized chain type: ${normalizedChainType}`);
+
+    // Check for existing ethereum wallet (which serves all EVM chains)
+    const existingWallet = await this.getWallet(userId, {
+      chainType: normalizedChainType,
+    });
     if (existingWallet) {
       console.log(
-        `✅ Wallet already exists for user ${userId} on ${chainType}`
+        `✅ Ethereum wallet already exists for user ${userId}, using for ${chainType}`
       );
       return { wallet: existingWallet, alreadyExisted: true };
     }
 
-    // 2. If not, create a new wallet
+    // Create new ethereum wallet
     console.log(
-      `🔍 Creating embedded wallet for user ${userId} on ${chainType}...`
+      `🔍 Creating ethereum wallet for user ${userId} (requested: ${chainType})...`
     );
 
     try {
@@ -171,32 +259,30 @@ class PrivyService {
         JSON.stringify(user, null, 2)
       );
 
-      // Use Privy's server SDK for wallet creation
-      console.log(
-        `🔍 Attempting to create ${chainType} wallet using Privy SDK...`
-      );
+      // Always create ethereum wallet type
+      console.log(`🔍 Creating ethereum wallet using Privy SDK...`);
 
       const walletData = await this.client.walletApi.createWallet({
         owner: { userId: userId },
-        chainType: chainType as "ethereum" | "cosmos" | "tron" | "solana",
+        chainType: "ethereum", // Always create ethereum type
       });
 
-      console.log("✅ Wallet created successfully:", walletData);
+      console.log("✅ Ethereum wallet created successfully:", walletData);
 
       return {
         wallet: {
           id: walletData.id,
           address: walletData.address,
           publicKey: walletData.address, // Placeholder since Privy doesn't expose public keys
-          chainType: walletData.chainType || chainType,
+          chainType: walletData.chainType || "ethereum",
         },
         alreadyExisted: false,
       };
     } catch (error) {
-      console.error("❌ Error creating wallet:", error);
+      console.error("❌ Error creating ethereum wallet:", error);
       console.log("🔍 Full error details:", JSON.stringify(error, null, 2));
       throw new Error(
-        `Failed to create ${chainType} wallet: ${
+        `Failed to create ethereum wallet for ${chainType}: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

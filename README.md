@@ -478,6 +478,7 @@ const chatAgent: AgentConfig = {
 - `listWallets`: List all embedded wallets across different blockchains
 - `createWallet`: Create new embedded wallets for specific blockchain networks
 - `requestUserSignature`: Send EVM transactions using Privy's built-in modal
+- **NEW** `sendTokenTransfer`: Send ERC-20 token transfers using Privy's built-in transaction support
 
 **Blockchain Queries**:
 
@@ -685,3 +686,61 @@ This project is **not** an MCP (Model Context Protocol) server. All agent and su
 - **This Project:** You must update the code to change agent behavior or add rules.
 
 ---
+
+## 🪙 Token Transfer Support
+
+### Privy Built-in Token Support
+
+The system now supports seamless ERC-20 token transfers using Privy's native transaction infrastructure:
+
+#### Features:
+
+- **Native Privy Integration**: Uses Privy's `sendTransaction` with encoded token data
+- **All EVM Chains**: Works on Ethereum, Polygon, Base, Arbitrum, and all supported networks
+- **Direct ERC-20 Encoding**: Generates standard transfer function call data directly
+- **Secure UX**: Users see Privy's native transaction modal with token details
+- **Cross-chain**: Same wallet address works for tokens on all EVM networks
+
+#### How It Works:
+
+1. User requests token transfer via voice: _"Send 100 USDC to Alice"_
+2. Agent calls `sendTokenTransfer` tool with token parameters
+3. Tool directly encodes ERC-20 transfer function call data
+4. Tool calls `requestUserSignature` with the encoded transaction data
+5. Privy shows transaction modal with token details for user review
+6. User confirms → Privy automatically signs and broadcasts
+7. Transaction hash returned for confirmation
+
+#### Example Usage:
+
+**Voice Command**: _"Send 100 USDC to 0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b"_
+
+**Tool Call**:
+
+```javascript
+sendTokenTransfer({
+  tokenAddress: "0xA0b86a33E6e87C6e81962e0c50c5B4e4b4c6c4f8", // USDC contract
+  to: "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
+  amount: "100000000", // 100 USDC (6 decimals)
+  chainId: "ethereum",
+  description: "Send 100 USDC to Alice",
+});
+```
+
+**Result**: Privy modal shows token transfer details, user confirms, transaction broadcasts automatically.
+
+#### Supported Token Examples:
+
+- **USDC**: 6 decimals (100 USDC = "100000000")
+- **USDT**: 6 decimals (50 USDT = "50000000")
+- **DAI**: 18 decimals (25 DAI = "25000000000000000000")
+- **Any ERC-20**: Automatically encoded with proper decimals
+
+#### Implementation Benefits:
+
+- ✅ **Secure**: Uses Privy's built-in security and signing
+- ✅ **User-friendly**: Native transaction modal with clear details
+- ✅ **Simple**: Direct ERC-20 encoding, no external API dependencies
+- ✅ **Fast**: Single tool call handles entire flow
+- ✅ **Cross-chain**: Works on all EVM networks seamlessly
+- ✅ **Gas optimized**: Privy handles gas estimation automatically

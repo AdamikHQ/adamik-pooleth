@@ -19,45 +19,65 @@ import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
 
 // Helper function to map chain IDs to their base chain types
+// EVM-ONLY: All supported chains map to ethereum base type
 const getChainTypeFromChainId = (chainId: string): string => {
-  // Map specific chain IDs to their base wallet types supported by Privy
-  const chainMapping: Record<string, string> = {
-    // Solana chains
-    solana: "solana",
-    "solana-devnet": "solana",
-    "solana-testnet": "solana",
+  // Map all EVM-compatible chain IDs to ethereum base wallet type
+  const evmChains = [
+    // Ethereum mainnet and testnets
+    "ethereum",
+    "ethereum-goerli",
+    "ethereum-sepolia",
+    "holesky",
 
-    // Ethereum and EVM chains
-    ethereum: "ethereum",
-    "ethereum-goerli": "ethereum",
-    "ethereum-sepolia": "ethereum",
-    polygon: "ethereum",
-    "polygon-mumbai": "ethereum",
-    arbitrum: "ethereum",
-    "arbitrum-goerli": "ethereum",
-    optimism: "ethereum",
-    "optimism-goerli": "ethereum",
-    base: "ethereum",
-    "base-goerli": "ethereum",
-    avalanche: "ethereum",
-    "avalanche-fuji": "ethereum",
-    bsc: "ethereum",
-    "bsc-testnet": "ethereum",
+    // Layer 2 and sidechains
+    "polygon",
+    "polygon-mumbai",
+    "polygon-amoy",
+    "arbitrum",
+    "arbitrum-goerli",
+    "arbitrum-sepolia",
+    "optimism",
+    "optimism-goerli",
+    "optimism-sepolia",
+    "base",
+    "base-goerli",
+    "base-sepolia",
 
-    // Tron chains
-    tron: "tron",
-    "tron-shasta": "tron",
+    // Other EVM networks
+    "avalanche",
+    "avalanche-fuji",
+    "bsc",
+    "bsc-testnet",
+    "zksync",
+    "zksync-sepolia",
+    "linea",
+    "linea-sepolia",
+    "gnosis",
+    "gnosis-chiado",
+    "moonbeam",
+    "moonriver",
+    "moonbase",
+    "fantom",
+    "mantle",
+    "rootstock",
+    "rootstock-testnet",
+    "chiliz",
+    "chiliz-testnet",
+    "cronos",
+    "world-chain",
+    "monad-testnet",
+    "berachain",
+    "berachain-bepolia",
+    "injective-evm-testnet",
+  ];
 
-    // Cosmos chains
-    cosmos: "cosmos",
-    "cosmos-testnet": "cosmos",
+  // All EVM chains use ethereum base type
+  if (evmChains.includes(chainId)) {
+    return "ethereum";
+  }
 
-    // Stellar chains
-    stellar: "stellar",
-    "stellar-testnet": "stellar",
-  };
-
-  return chainMapping[chainId] || "ethereum"; // Default to ethereum for unknown chains
+  // Default to ethereum for unknown chains (assumed EVM-compatible)
+  return "ethereum";
 };
 
 // Helper function to validate transaction body and provide helpful error messages
@@ -179,7 +199,7 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(address);
     return { content: [{ type: "text", text }] };
   },
-  // Lists all wallets for the user
+  // Lists all wallets for the user (EVM-only)
   listWallets: async (
     params: any,
     userContext?: { userId: string; walletAddress?: string }
@@ -188,7 +208,7 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(wallets);
     return { content: [{ type: "text", text }] };
   },
-  // Creates a new wallet for a given chain
+  // Creates a new EVM wallet
   createWallet: async (
     { chainType }: { chainType: string },
     userContext?: { userId: string; walletAddress?: string }
@@ -200,25 +220,23 @@ const toolLogic: Record<string, any> = {
         )}`
       );
     }
-    // Map to base chain type
-    const getBaseChainType = (chain: string): string => {
-      if (chain === "solana") return "solana";
-      if (chain === "tron") return "tron";
-      if (chain === "cosmos") return "cosmos";
-      return "ethereum";
-    };
-    const baseChainType = getBaseChainType(chainType);
+
+    // EVM-ONLY: All supported chains use ethereum base type
+    const baseChainType = "ethereum";
+
     // Call makeWalletRequest for createWallet, expecting { wallet, alreadyExisted }
     const result = await makeWalletRequest(
       "createWallet",
       { chainType: baseChainType },
       userContext
     );
+
     // Include the requested chain in the response for context
     if (result && typeof result === "object" && "wallet" in result) {
       result.requestedChain = chainType;
       result.baseChainType = baseChainType;
     }
+
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
@@ -508,6 +526,139 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(response);
     return { content: [{ type: "text", text }] };
   },
+
+  // NEW: Sends ERC-20 token transfers using Privy's built-in sendTransaction
+  // This tool generates ERC-20 transfer data directly and uses Privy's native transaction support
+  sendTokenTransfer: async (
+    params: any,
+    userContext?: { userId: string; walletAddress?: string }
+  ) => {
+    // Extract token transfer parameters
+    const { tokenAddress, to, amount, chainId, description } = params;
+
+    // Validate required parameters
+    if (!tokenAddress) {
+      throw new Error(
+        "Missing 'tokenAddress' parameter - token contract address is required"
+      );
+    }
+
+    if (!to) {
+      throw new Error("Missing 'to' parameter - recipient address is required");
+    }
+
+    if (!amount) {
+      throw new Error("Missing 'amount' parameter - token amount is required");
+    }
+
+    if (!chainId) {
+      throw new Error("Missing 'chainId' parameter - chain ID is required");
+    }
+
+    // Ensure chainId is EVM compatible
+    const evmChains = [
+      "ethereum",
+      "sepolia",
+      "holesky",
+      "base",
+      "base-sepolia",
+      "optimism",
+      "optimism-sepolia",
+      "arbitrum",
+      "arbitrum-sepolia",
+      "polygon",
+      "polygon-amoy",
+      "bsc",
+      "bsc-testnet",
+      "avalanche",
+      "avalanche-fuji",
+      "zksync",
+      "zksync-sepolia",
+      "linea",
+      "linea-sepolia",
+      "gnosis",
+      "gnosis-chiado",
+      "moonbeam",
+      "moonriver",
+      "moonbase",
+      "fantom",
+      "mantle",
+      "rootstock",
+      "rootstock-testnet",
+      "chiliz",
+      "chiliz-testnet",
+      "cronos",
+      "world-chain",
+      "monad-testnet",
+      "berachain",
+      "berachain-bepolia",
+      "injective-evm-testnet",
+    ];
+
+    if (!evmChains.includes(chainId)) {
+      throw new Error(
+        `Chain ${chainId} is not supported for token transfers. ` +
+          `Supported EVM chains: ${evmChains.join(", ")}`
+      );
+    }
+
+    try {
+      console.log("🪙 Encoding ERC-20 transfer data directly...");
+
+      // Generate ERC-20 transfer function call data
+      // Function signature: transfer(address,uint256)
+      // Function selector: 0xa9059cbb (first 4 bytes of keccak256("transfer(address,uint256)"))
+
+      // Remove 0x prefix from recipient address if present
+      const cleanRecipient = to.startsWith("0x") ? to.slice(2) : to;
+
+      // Ensure recipient address is 40 characters (20 bytes)
+      if (cleanRecipient.length !== 40) {
+        throw new Error("Invalid recipient address format");
+      }
+
+      // Convert amount to BigInt and then to hex (32 bytes, big-endian)
+      const amountBigInt = BigInt(amount);
+      const amountHex = amountBigInt.toString(16).padStart(64, "0");
+
+      // Construct the function call data
+      const functionSelector = "a9059cbb"; // transfer(address,uint256)
+      const recipientPadded = cleanRecipient.padStart(64, "0"); // 32 bytes
+      const amountPadded = amountHex; // 32 bytes
+
+      const transferData = `0x${functionSelector}${recipientPadded}${amountPadded}`;
+
+      console.log("✅ ERC-20 transfer data encoded successfully");
+      console.log(`📋 Function: transfer(${to}, ${amount})`);
+      console.log(`📋 Data length: ${transferData.length} characters`);
+
+      // Use Privy's requestUserSignature with the encoded token data
+      console.log("🔄 Preparing token transfer for user signature...");
+
+      const signatureResult = await toolLogic.requestUserSignature(
+        {
+          to: tokenAddress, // Send to the token contract
+          value: "0", // No ETH value for token transfers
+          chainId,
+          data: transferData, // Include the encoded ERC-20 transfer data
+          description: description || `Send ${amount} tokens to ${to}`,
+        },
+        userContext
+      );
+
+      console.log("✅ Token transfer ready for user signature");
+
+      // Return the transaction request
+      return signatureResult;
+    } catch (error) {
+      console.error("❌ Token transfer failed:", error);
+      throw new Error(
+        `Token transfer failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  },
 };
 
 // Tool definitions for OpenAI function calling (names, descriptions, schemas)
@@ -515,7 +666,7 @@ export const toolDefinitions = [
   {
     type: "function" as const,
     name: "getSupportedChains",
-    description: "Get a list of supported chain IDs",
+    description: "Get a list of supported EVM-compatible chain IDs",
     parameters: {
       type: "object",
       properties: {},
@@ -543,13 +694,13 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "getTokenDetails",
     description:
-      "Fetches information about a non-native token (ERC-20, TRC-20, SPL, etc.) including its decimal precision for human-readable balance formatting.",
+      "Fetches information about a non-native token (ERC-20, etc.) including its decimal precision for human-readable balance formatting.",
     parameters: {
       type: "object",
       properties: {
         chainId: {
           type: "string",
-          description: "The ID of the blockchain network",
+          description: "The ID of the EVM blockchain network",
         },
         tokenId: {
           type: "string",
@@ -563,7 +714,7 @@ export const toolDefinitions = [
   {
     type: "function" as const,
     name: "getAddress",
-    description: "Get the wallet address",
+    description: "Get the EVM wallet address",
     parameters: {
       type: "object",
       properties: {},
@@ -574,7 +725,7 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "listWallets",
     description:
-      "List all embedded wallets for the user across different blockchains",
+      "List all embedded EVM wallets for the user. Returns only EVM-compatible wallets.",
     parameters: {
       type: "object",
       properties: {},
@@ -585,14 +736,14 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "createWallet",
     description:
-      "Create a new embedded wallet for a specific blockchain network. Supports creating wallets for different chain types like ethereum, solana, tron, and cosmos.",
+      "Create a new embedded EVM wallet. All EVM chains (Ethereum, Polygon, Base, Arbitrum, etc.) use the same wallet address.",
     parameters: {
       type: "object",
       properties: {
         chainType: {
           type: "string",
           description:
-            "The blockchain type to create a wallet for (e.g., 'ethereum', 'solana', 'tron', 'cosmos'). Must be one of the supported chains.",
+            "The EVM blockchain network to create a wallet for (e.g., 'ethereum', 'polygon', 'base', 'arbitrum'). All EVM chains use the same wallet address.",
           enum: chains,
         },
       },
@@ -694,17 +845,17 @@ Encodes a transaction for blockchain submission. Returns an encoded transaction 
 REQUIRED FIELDS:
 - mode: MANDATORY discriminator field. Must be one of: "transfer", "transferToken", "stake", "unstake", "claimRewards", "withdraw", "registerStake", "convertAsset", "deployAccount"
 - senderAddress: Sender's wallet address (auto-populated if missing for transfer/transferToken)
-- amount: Amount in smallest units as STRING (e.g., "10000000" for 0.01 SOL) OR useMaxAmount: true
+- amount: Amount in smallest units as STRING (e.g., "1000000000000000000" for 1 ETH) OR useMaxAmount: true
 
 EXAMPLES:
 
-SOL Transfer:
+ETH Transfer:
 {
-  "chainId": "solana",
+  "chainId": "ethereum",
   "body": {
     "mode": "transfer",
-    "recipientAddress": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
-    "amount": "10000000"
+    "recipientAddress": "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
+    "amount": "1000000000000000000"
   }
 }
 
@@ -716,16 +867,6 @@ Token Transfer:
     "tokenId": "0xA0b86a33E6e87C6e81962e0c50c5B4e4b4c6c4f8",
     "recipientAddress": "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
     "amount": "1000000000000000000"
-  }
-}
-
-Staking:
-{
-  "chainId": "cosmos",
-  "body": {
-    "mode": "stake", 
-    "targetValidatorAddress": "cosmosvaloper1...",
-    "amount": "1000000"
   }
 }
 
@@ -784,6 +925,42 @@ CRITICAL: Always include the "mode" field - it's required for schema validation!
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "sendTokenTransfer",
+    description:
+      "Sends a token transfer transaction using Privy's built-in sendTransaction. This handles encoding the token data and presenting the user with a signature request.",
+    parameters: {
+      type: "object",
+      properties: {
+        tokenAddress: {
+          type: "string",
+          description: "The contract address of the token to transfer",
+        },
+        to: {
+          type: "string",
+          description: "The recipient address for the token transfer",
+        },
+        amount: {
+          type: "string",
+          description:
+            "The amount of tokens to transfer in smallest units (e.g., '1000000000000000000' for 1 token).",
+        },
+        chainId: {
+          type: "string",
+          description:
+            "The EVM chain ID (e.g., 'ethereum', 'polygon', 'base', 'arbitrum')",
+        },
+        description: {
+          type: "string",
+          description:
+            "A human-readable description of what this token transfer will do (e.g., 'Send 100 tokens to Alice'). This will be shown to the user when they are asked to confirm.",
+        },
+      },
+      required: ["tokenAddress", "to", "amount", "chainId", "description"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 // Supervisor agent entry point: executes tool logic for the main agent
@@ -839,7 +1016,7 @@ export const getNextResponseFromSupervisor = {
 export const supervisorAgentConfig = {
   name: "Adamik Supervisor",
   publicDescription:
-    "Supervisor agent for Adamik voice agent, handles all tool logic and decision making.",
+    "Supervisor agent for Adamik voice agent, handles all tool logic and decision making for EVM-compatible blockchains.",
   model: "gpt-4.1",
   instructions: "See supervisorAgentInstructions in this file.",
   tools: [getNextResponseFromSupervisor],

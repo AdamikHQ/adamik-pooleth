@@ -57,7 +57,7 @@ function App() {
     useState<SessionStatus>("DISCONNECTED");
 
   const [isEventsPaneExpanded, setIsEventsPaneExpanded] =
-    useState<boolean>(true);
+    useState<boolean>(false);
   const [userText, setUserText] = useState<string>("");
   const [isPTTActive, setIsPTTActive] = useState<boolean>(false);
   const [isPTTUserSpeaking, setIsPTTUserSpeaking] = useState<boolean>(false);
@@ -455,13 +455,6 @@ function App() {
   //   setSelectedAgentName(newAgentName);
   // };
 
-  // Instead of using setCodec, we update the URL and refresh the page when codec changes
-  const handleCodecChange = (newCodec: string) => {
-    const url = new URL(window.location.toString());
-    url.searchParams.set("codec", newCodec);
-    window.location.replace(url.toString());
-  };
-
   useEffect(() => {
     const storedPushToTalkUI = localStorage.getItem("pushToTalkUI");
     if (storedPushToTalkUI) {
@@ -617,64 +610,58 @@ function App() {
               height={40}
               className="h-8 w-auto"
             />
-            <h1 className="text-xl font-bold text-gray-900 max-sm:hidden">
-              Voice Agent
-            </h1>
+            {/* Removed as per instructions */}
           </div>
 
-          <div className="flex items-center space-x-4 max-sm:space-x-2">
-            <div className="flex items-center space-x-3 max-sm:space-x-2">
-              <label className="text-sm font-medium text-gray-700 max-sm:hidden">
-                Agent
-              </label>
-              <div className="relative">
-                <select
-                  className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:min-w-[100px] max-sm:px-3 max-sm:py-1 max-sm:text-xs"
-                  value={agentSetKey}
-                  onChange={handleAgentChange}
-                >
-                  {Object.keys(allAgentSets).map((agentKey) => (
-                    <option key={agentKey} value={agentKey}>
-                      {agentKey}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
-                  <svg
-                    className="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            {/* User Information */}
-            <div className="flex items-center space-x-4 pl-4 border-l border-gray-200 max-sm:pl-0 max-sm:border-l-0 max-sm:border-t max-sm:pt-3 max-sm:w-full max-sm:justify-between">
-              <div className="text-right max-sm:text-left">
+          {/* User Information */}
+          <div className="flex items-center space-x-4">
+            <div className="text-right max-sm:text-left">
+              {(user?.email?.address || user?.phone?.number) && (
                 <div className="text-sm font-medium text-gray-700">
-                  {user?.email?.address || user?.phone?.number || "User"}
+                  {user?.email?.address || user?.phone?.number}
                 </div>
-                {userWallet && (
-                  <div className="text-xs text-gray-500 font-mono">
-                    {userWallet.address?.slice(0, 6)}...
-                    {userWallet.address?.slice(-4)}
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={logout}
-                className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-              >
-                Logout
-              </button>
+              )}
+              {userWallet && (
+                <div className="flex items-center space-x-2 text-xs text-gray-500 font-mono">
+                  <span>{userWallet.address}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(userWallet.address);
+                      // Simple feedback - you could add a toast notification here
+                      const button =
+                        document.activeElement as HTMLButtonElement;
+                      const originalText = button.textContent;
+                      button.textContent = "✓";
+                      setTimeout(() => {
+                        button.textContent = originalText;
+                      }, 1000);
+                    }}
+                    className="p-1 hover:bg-gray-100 rounded transition-colors"
+                    title="Copy address"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>
@@ -707,8 +694,6 @@ function App() {
         setIsEventsPaneExpanded={setIsEventsPaneExpanded}
         isAudioPlaybackEnabled={isAudioPlaybackEnabled}
         setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
-        codec={urlCodec}
-        onCodecChange={handleCodecChange}
       />
     </div>
   );

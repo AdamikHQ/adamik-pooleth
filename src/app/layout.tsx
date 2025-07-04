@@ -3,6 +3,7 @@
 import "./globals.css";
 import "./lib/envSetup";
 import { PrivyProvider } from "@privy-io/react-auth";
+import { allSupportedChains, defaultChain } from "@/app/config/privyChains";
 
 // Move metadata to a separate file or handle it differently since this is now a client component
 // export const metadata: Metadata = {
@@ -56,6 +57,9 @@ export default function RootLayout({
               createOnLogin: "users-without-wallets", // Auto-create wallets
               requireUserPasswordOnCreate: false, // Simplify wallet creation
             },
+            // EVM chains configuration using viem/chains (recommended by Privy)
+            defaultChain: defaultChain,
+            supportedChains: allSupportedChains,
             // Clean appearance settings
             appearance: {
               theme: "light",

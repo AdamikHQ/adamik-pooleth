@@ -145,22 +145,10 @@ export async function POST(req: Request) {
         // Create a new embedded wallet for the user on a specific chain
         const { chainType: newChainType = "ethereum" } = body;
 
-        // Map specific chains to their base wallet types supported by Privy
-        const getBaseChainType = (chain: string): string => {
-          if (chain === "solana") return "solana";
-          if (chain === "tron") return "tron";
-          if (chain === "cosmos") return "cosmos";
-          if (chain === "stellar") return "stellar";
-          // All EVM-compatible chains use ethereum as the base type
-          return "ethereum";
-        };
-
-        const baseChainType = getBaseChainType(newChainType);
-
         try {
           const { wallet, alreadyExisted } = await privyService.createWallet(
             userId,
-            baseChainType
+            newChainType // Let Privy service handle normalization and validation
           );
           return NextResponse.json({
             success: true,
@@ -172,7 +160,7 @@ export async function POST(req: Request) {
             },
             alreadyExisted,
             requestedChain: newChainType,
-            baseChainType: baseChainType,
+            baseChainType: "ethereum", // Always ethereum under EVM-only policy
           });
         } catch (error) {
           console.error("Error creating wallet:", error);
@@ -181,7 +169,7 @@ export async function POST(req: Request) {
               error: "Failed to create wallet",
               message: error instanceof Error ? error.message : String(error),
               chainType: newChainType,
-              baseChainType: baseChainType,
+              baseChainType: "ethereum",
             },
             { status: 500 }
           );
