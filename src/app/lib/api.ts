@@ -47,25 +47,6 @@ export async function makeApiRequest(
   return data;
 }
 
-export async function makeProxyRequest(
-  url: string,
-  method: "GET" | "POST" = "GET",
-  body?: any
-): Promise<any> {
-  const proxyRequest = await fetch("/api/adamik", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      body,
-      method,
-    }),
-  });
-  return await proxyRequest.json();
-}
-
 export async function makeWalletRequest(
   action: string,
   params: any = {},

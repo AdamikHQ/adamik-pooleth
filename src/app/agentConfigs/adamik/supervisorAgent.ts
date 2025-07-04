@@ -14,7 +14,8 @@ import {
   PubkeyToAddressPathParams,
   PubkeyToAddressRequestBody,
 } from "./schemas";
-import { makeProxyRequest, makeWalletRequest } from "@/app/lib/api";
+import { makeProxyRequest } from "@/app/services/adamik";
+import { makeWalletRequest } from "@/app/lib/api";
 
 // Tool logic implementations for all supported tools
 const toolLogic: Record<string, any> = {
@@ -92,14 +93,16 @@ const toolLogic: Record<string, any> = {
       return "ethereum";
     };
     const baseChainType = getBaseChainType(chainType);
+    // Call makeWalletRequest for createWallet, expecting { wallet, alreadyExisted }
     const result = await makeWalletRequest(
       "createWallet",
       { chainType: baseChainType },
       userContext
     );
+    // Include the requested chain in the response for context
     if (result && typeof result === "object" && "wallet" in result) {
-      (result as any).requestedChain = chainType;
-      (result as any).baseChainType = baseChainType;
+      result.requestedChain = chainType;
+      result.baseChainType = baseChainType;
     }
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
@@ -122,9 +125,43 @@ const toolLogic: Record<string, any> = {
     chainId,
     accountId,
   }: GetAccountStatePathParams) => {
+    // 1. Fetch the account state
     const state = await makeProxyRequest(
       `/${chainId}/account/${accountId}/state`
     );
+
+    // 2. Verify/format native balance decimals
+    if (state?.balances?.native && state.balances.native.available != null) {
+      // Fetch chain features to get native decimals
+      const features = await makeProxyRequest(`/chains/${chainId}`);
+      const decimals = features?.nativeCurrency?.decimals;
+      if (typeof decimals === "number") {
+        state.balances.native.formattedAvailable = (
+          Number(state.balances.native.available) / Math.pow(10, decimals)
+        ).toString();
+        state.balances.native.decimals = decimals;
+      }
+    }
+
+    // 3. Verify/format token balances decimals
+    if (state?.balances?.tokens && Array.isArray(state.balances.tokens)) {
+      for (const token of state.balances.tokens) {
+        if (token.tokenId && token.amount != null) {
+          // Fetch token details (including decimals)
+          const tokenDetails = await makeProxyRequest(
+            `/${chainId}/token/${token.tokenId}`
+          );
+          if (tokenDetails?.decimals != null) {
+            token.formattedAmount = (
+              Number(token.amount) / Math.pow(10, tokenDetails.decimals)
+            ).toString();
+            token.decimals = tokenDetails.decimals;
+          }
+        }
+      }
+    }
+
+    // 4. Return the verified/formatted state
     const text = JSON.stringify(state);
     return { content: [{ type: "text", text }] };
   },

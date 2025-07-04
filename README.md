@@ -109,14 +109,19 @@ graph TD
 
 #### 3. Service Layer
 
-**Privy Service** (`src/app/services/privy.ts`)
+- **Privy Service** (`src/app/services/privy.ts`)
+- **Adamik Service** (`src/app/services/adamik.ts`)
+
+All third-party integrations are now centralized in the `src/app/services/` directory for maintainability and clarity.
+
+**Privy Service**
 
 - **Wallet Management**: Create and manage embedded wallets
 - **Key Operations**: Extract public keys for multi-chain address derivation
 - **Transaction Signing**: Raw hash signing for any blockchain
 - **User Context**: Secure, user-specific wallet operations
 
-**Adamik API Integration**
+**Adamik Service**
 
 - **Chain Operations**: Balance queries, transaction history, validator lists
 - **Transaction Encoding**: Convert transaction intents to signable format
@@ -645,3 +650,39 @@ For issues and questions:
 ---
 
 **Built with ❤️ for the blockchain community**
+
+## ❗️ Important: Not an MCP Server
+
+This project is **not** an MCP (Model Context Protocol) server. All agent and supervisor logic, tool implementations, and business rules are written in TypeScript code (see `src/app/agentConfigs/adamik/supervisorAgent.ts`).
+
+- **Rules and behaviors are hardcoded in code.**
+- **To change logic (e.g., add validation, formatting, or business rules), you must edit the relevant TypeScript function and redeploy.**
+- **You cannot change agent behavior or add rules at runtime by updating a prompt or context.**
+- **All tools are explicit TypeScript functions with clear parameters and return values.**
+
+### How to Add or Change Rules
+
+- **Find the relevant tool logic in `supervisorAgent.ts` (e.g., `getAccountState`).**
+- **Edit the function to add your custom rule (e.g., decimal verification, validation, formatting, etc.).**
+- **Save, test, and redeploy.**
+
+### Example: Decimal Verification for Balances
+
+- The supervisor agent's `getAccountState` tool logic fetches and verifies decimals for both native and token balances before returning results to the user.
+- This is implemented in TypeScript, not via prompt.
+
+---
+
+## 🆚 How This Differs from an MCP Server
+
+| Feature/Capability        | This Project (Supervisor Agent) | MCP Server        |
+| ------------------------- | ------------------------------- | ----------------- |
+| Hardcoded tool logic      | ✅                              | ❌                |
+| Prompt-driven rules       | ❌                              | ✅                |
+| Runtime behavior changes  | ❌                              | ✅                |
+| Explicit TypeScript tools | ✅                              | (Optional/Hybrid) |
+
+- **MCP Server:** You can change agent behavior by updating the prompt/context at runtime.
+- **This Project:** You must update the code to change agent behavior or add rules.
+
+---

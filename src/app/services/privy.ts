@@ -112,11 +112,23 @@ class PrivyService {
 
   /**
    * Create a new embedded wallet for a user on a specific chain
+   * Enforces one wallet per chain per user: returns existing wallet if present.
+   * Returns { wallet, alreadyExisted } to indicate if a new wallet was created.
    */
   async createWallet(
     userId: string,
     chainType: string = "ethereum"
-  ): Promise<PrivyWallet> {
+  ): Promise<{ wallet: PrivyWallet; alreadyExisted: boolean }> {
+    // 1. Check for existing wallet
+    const existingWallet = await this.getWallet(userId, { chainType });
+    if (existingWallet) {
+      console.log(
+        `✅ Wallet already exists for user ${userId} on ${chainType}`
+      );
+      return { wallet: existingWallet, alreadyExisted: true };
+    }
+
+    // 2. If not, create a new wallet
     console.log(
       `🔍 Creating embedded wallet for user ${userId} on ${chainType}...`
     );
@@ -147,10 +159,13 @@ class PrivyService {
       console.log("✅ Wallet created successfully:", walletData);
 
       return {
-        id: walletData.id,
-        address: walletData.address,
-        publicKey: walletData.address, // Placeholder since Privy doesn't expose public keys
-        chainType: walletData.chainType || chainType,
+        wallet: {
+          id: walletData.id,
+          address: walletData.address,
+          publicKey: walletData.address, // Placeholder since Privy doesn't expose public keys
+          chainType: walletData.chainType || chainType,
+        },
+        alreadyExisted: false,
       };
     } catch (error) {
       console.error("❌ Error creating wallet:", error);

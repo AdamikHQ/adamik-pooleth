@@ -62,6 +62,45 @@ export function useHandleServerEvent({
         fnResult
       );
 
+      // PATCH: Custom user-friendly message for createWallet
+      if (functionCallParams.name === "createWallet") {
+        let userMessage = "";
+        try {
+          const result = JSON.parse(fnResult.content?.[0]?.text || "{}{}");
+          if (result.wallet && typeof result.alreadyExisted === "boolean") {
+            if (result.alreadyExisted) {
+              userMessage = `You already have a ${
+                result.requestedChain
+              } wallet. The wallet address starts with ${result.wallet.address.slice(
+                0,
+                4
+              )} and ends with ${result.wallet.address.slice(-3)}.`;
+            } else {
+              userMessage = `Your new ${
+                result.requestedChain
+              } wallet has been successfully created! The wallet address starts with ${result.wallet.address.slice(
+                0,
+                4
+              )} and ends with ${result.wallet.address.slice(-3)}.`;
+            }
+          } else {
+            userMessage = fnResult.content?.[0]?.text || "";
+          }
+        } catch {
+          userMessage = fnResult.content?.[0]?.text || "";
+        }
+        sendClientEvent({
+          type: "conversation.item.create",
+          item: {
+            type: "function_call_output",
+            call_id: functionCallParams.call_id,
+            output: userMessage,
+          },
+        });
+        sendClientEvent({ type: "response.create" });
+        return;
+      }
+      // Default: send raw JSON/text for other tools
       sendClientEvent({
         type: "conversation.item.create",
         item: {
