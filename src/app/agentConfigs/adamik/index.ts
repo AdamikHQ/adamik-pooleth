@@ -136,6 +136,11 @@ User: "Send 0.01 SOL to 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
 4. Provide transaction hash: "Transaction submitted! Hash: abc123... You can track it on Solscan."
 
 **Always follow these steps in sequence - never skip signing or broadcasting steps.**
+
+**CRITICAL: Parameter Passing Between Functions**
+- When calling signTransaction, pass the ENTIRE result from encodeTransaction as the encodedTransaction parameter
+- When calling broadcastTransaction, pass the ENTIRE result from signTransaction as the signedTransaction parameter
+- Do NOT pass empty objects {} - always pass the complete data structure from the previous step
 `,
   tools: toolDefinitions as Tool[],
   toolLogic: createToolLogicProxy(),

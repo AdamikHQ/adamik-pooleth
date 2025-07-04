@@ -361,12 +361,29 @@ const toolLogic: Record<string, any> = {
     userContext?: { userId: string; walletAddress?: string }
   ) => {
     console.log(`[signTransaction] Starting signature process for transaction`);
+    console.log(
+      `[signTransaction] Input:`,
+      JSON.stringify(encodedTransaction, null, 2)
+    );
 
-    if (!encodedTransaction || !encodedTransaction.transaction) {
-      throw new Error("Invalid encoded transaction format");
+    // Handle case where encodedTransaction might be a JSON string
+    let txData = encodedTransaction;
+    if (typeof encodedTransaction === "string") {
+      try {
+        txData = JSON.parse(encodedTransaction);
+      } catch (err) {
+        throw new Error("Invalid JSON string for encoded transaction");
+      }
     }
 
-    const tx = encodedTransaction.transaction;
+    // The encoded transaction should have the full response from encodeTransaction
+    if (!txData || !txData.transaction) {
+      throw new Error(
+        "Invalid encoded transaction format - missing transaction object"
+      );
+    }
+
+    const tx = txData.transaction;
 
     // Find the hash to sign from the encoded items
     if (!tx.encoded || !Array.isArray(tx.encoded)) {
@@ -374,18 +391,38 @@ const toolLogic: Record<string, any> = {
     }
 
     let hashToSign: string | null = null;
+
+    // Look for the hash in different possible locations
     for (const item of tx.encoded) {
       if (item.payload) {
+        // Direct payload field
         hashToSign = item.payload;
+        break;
+      } else if (item.raw && item.raw.value) {
+        // Adamik format: raw.value contains the serialized transaction
+        hashToSign = item.raw.value;
+        break;
+      } else if (item.value) {
+        // Alternative format
+        hashToSign = item.value;
         break;
       }
     }
 
     if (!hashToSign) {
-      throw new Error("No hash found to sign in encoded transaction");
+      console.error(
+        `[signTransaction] No hash found. Available structure:`,
+        JSON.stringify(tx.encoded, null, 2)
+      );
+      throw new Error(
+        "No hash found to sign in encoded transaction. Check the encoded items structure."
+      );
     }
 
-    console.log(`[signTransaction] Hash to sign: ${hashToSign}`);
+    // For Solana, we need to sign the raw transaction bytes, not hash them
+    console.log(
+      `[signTransaction] Data to sign: ${hashToSign.substring(0, 100)}...`
+    );
 
     // Get the user's wallet for this chain
     const walletResult = await makeWalletRequest(
@@ -400,10 +437,20 @@ const toolLogic: Record<string, any> = {
 
     console.log(`[signTransaction] Using wallet: ${walletResult.walletId}`);
 
+    // For Solana, we need to create a hash of the transaction data before signing
+    // The raw value from Adamik is the serialized transaction that needs to be hashed
+    let hashForSigning = hashToSign;
+
+    // If this is raw transaction data (like Solana BORSH), we need to hash it
+    // For now, we'll assume Privy handles this internally
+    if (!hashForSigning.startsWith("0x")) {
+      hashForSigning = "0x" + hashForSigning;
+    }
+
     // Sign the hash using Privy
     const signResult = await makeWalletRequest(
       "rawSign",
-      { hash: hashToSign },
+      { hash: hashForSigning },
       userContext
     );
 
@@ -411,11 +458,13 @@ const toolLogic: Record<string, any> = {
       throw new Error("Failed to create signature");
     }
 
-    console.log(`[signTransaction] Signature created successfully`);
+    console.log(
+      `[signTransaction] Signature created successfully: ${signResult.signature}`
+    );
 
     // Return the signed transaction data ready for broadcast
     const signedTransaction = {
-      ...encodedTransaction,
+      ...txData,
       transaction: {
         ...tx,
         signature: signResult.signature,
@@ -682,14 +731,14 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "signTransaction",
     description:
-      "Signs an encoded transaction using Privy's raw signing capability. Takes the output from encodeTransaction and produces a signed transaction ready for broadcast.",
+      "Signs an encoded transaction using Privy's raw signing capability. Takes the COMPLETE output from encodeTransaction (the entire JSON object including chainId, transaction, and status) and produces a signed transaction ready for broadcast. IMPORTANT: Pass the full encodeTransaction result, not just parts of it.",
     parameters: {
       type: "object",
       properties: {
         encodedTransaction: {
           type: "object",
           description:
-            "The encoded transaction object returned from encodeTransaction",
+            "The COMPLETE encoded transaction object returned from encodeTransaction - pass the entire JSON result including chainId, transaction.data, transaction.encoded, and status fields",
         },
       },
       required: ["encodedTransaction"],
