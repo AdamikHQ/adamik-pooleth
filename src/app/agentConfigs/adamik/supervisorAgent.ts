@@ -282,19 +282,46 @@ const toolLogic: Record<string, any> = {
     // 3. Verify/format token balances decimals
     if (state?.balances?.tokens && Array.isArray(state.balances.tokens)) {
       for (const token of state.balances.tokens) {
-        if (token.tokenId && token.amount != null) {
-          // Fetch token details (including decimals)
-          const tokenDetails = await makeProxyRequest(
-            `/${chainId}/token/${token.tokenId}`
-          );
+        // Check for correct token structure: token.token.id and token.amount
+        if (token.token?.id && token.amount != null) {
+          // First, try to use decimals already provided in the response
+          let decimals = token.token.decimals;
 
-          if (tokenDetails?.decimals != null) {
+          // If decimals is a string, convert to number
+          if (typeof decimals === "string") {
+            decimals = parseInt(decimals, 10);
+          }
+
+          // If no decimals in response or invalid, fetch token details
+          if (typeof decimals !== "number" || isNaN(decimals)) {
+            try {
+              const tokenDetails = await makeProxyRequest(
+                `/${chainId}/token/${token.token.id}`
+              );
+              decimals = tokenDetails?.decimals;
+            } catch (error) {
+              console.warn(
+                `Failed to fetch token details for ${token.token.id}:`,
+                error
+              );
+              // Skip formatting for this token if we can't get decimals
+              continue;
+            }
+          }
+
+          if (typeof decimals === "number" && !isNaN(decimals)) {
             const rawValue = Number(token.amount);
-            const divisor = Math.pow(10, tokenDetails.decimals);
+            const divisor = Math.pow(10, decimals);
             const formattedValue = rawValue / divisor;
 
             token.formattedAmount = formattedValue.toString();
-            token.decimals = tokenDetails.decimals;
+            token.decimals = decimals;
+
+            console.log(
+              `✅ Formatted token balance: ${
+                token.token.ticker || token.token.name
+              } - ${rawValue} (raw) → ${formattedValue} (formatted) with ${decimals} decimals`
+            );
           }
         }
       }

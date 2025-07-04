@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { SessionStatus } from "@/app/types";
 
 interface BottomToolbarProps {
@@ -30,6 +30,61 @@ function BottomToolbar({
 }: BottomToolbarProps) {
   const isConnected = sessionStatus === "CONNECTED";
   const isConnecting = sessionStatus === "CONNECTING";
+
+  // Space key push-to-talk functionality
+  useEffect(() => {
+    const isInputFocused = () => {
+      const activeElement = document.activeElement;
+      if (!activeElement) return false;
+
+      // Check if the focused element is an input field, textarea, or contenteditable
+      const tagName = activeElement.tagName.toLowerCase();
+      const isEditable =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        activeElement.getAttribute("contenteditable") === "true" ||
+        activeElement.getAttribute("contenteditable") === "";
+
+      return isEditable;
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only activate if PTT is enabled, connected, space key is pressed, and NOT in an input field
+      if (
+        event.code === "Space" &&
+        isPTTActive &&
+        isConnected &&
+        !event.repeat && // Prevent multiple events while key is held
+        !isInputFocused() // NEW: Don't activate PTT when typing in input fields
+      ) {
+        event.preventDefault(); // Prevent page scrolling
+        handleTalkButtonDown();
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      // Only deactivate if PTT is enabled, connected, space key is released, and NOT in an input field
+      if (
+        event.code === "Space" &&
+        isPTTActive &&
+        isConnected &&
+        !isInputFocused() // NEW: Don't deactivate PTT when typing in input fields
+      ) {
+        event.preventDefault(); // Prevent page scrolling
+        handleTalkButtonUp();
+      }
+    };
+
+    // Add event listeners to the document
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+
+    // Cleanup event listeners on unmount or dependencies change
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [isPTTActive, isConnected, handleTalkButtonDown, handleTalkButtonUp]);
 
   function getConnectionButtonLabel() {
     if (isConnected) return "Disconnect";
