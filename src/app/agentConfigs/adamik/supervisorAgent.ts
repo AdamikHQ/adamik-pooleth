@@ -491,204 +491,107 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
-  // Requests user to sign a transaction on the client-side
+  // Requests user to send a transaction using Privy's sendTransaction (simplified EVM approach)
   requestUserSignature: async (
     params: any,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userContext?: { userId: string; walletAddress?: string }
   ) => {
-    console.log(
-      `[requestUserSignature] Preparing transaction for user signing`
-    );
+    console.log(`[requestUserSignature] Preparing Privy transaction`);
     console.log(
       `[requestUserSignature] Raw params:`,
       JSON.stringify(params, null, 2)
     );
 
-    // Check if this is the common mistake where only description is provided
-    if (
-      params.description &&
-      !params.encodedTransaction &&
-      Object.keys(params).length === 1
-    ) {
-      throw new Error(
-        `MISSING ENCODED TRANSACTION: You called requestUserSignature with only a description. You must pass the COMPLETE result from encodeTransaction as the 'encodedTransaction' parameter.
+    // Extract transaction parameters from the request
+    const { to, value, chainId, data, gasLimit, description } = params;
 
-CORRECT USAGE:
-1. First call encodeTransaction to get the encoded transaction
-2. Then call requestUserSignature with BOTH parameters:
-   - encodedTransaction: <the complete result from encodeTransaction>
-   - description: "${params.description}"
-
-EXAMPLE:
-After encodeTransaction returns a result, call:
-requestUserSignature({
-  encodedTransaction: <the complete encodeTransaction result>,
-  description: "${params.description}"
-})`
-      );
+    // Validate required parameters
+    if (!to) {
+      throw new Error("Missing 'to' parameter - recipient address is required");
     }
 
-    // Handle different parameter formats from the AI
-    let txData;
-    const description = params.description || "Sign this transaction";
-
-    // More flexible parameter handling
-    if (params.encodedTransaction) {
-      // Format 1: { encodedTransaction: { chainId, transaction, status }, description }
-      txData = params.encodedTransaction;
-    } else if (params.chainId && params.transaction) {
-      // Format 2: { chainId, transaction, status } (unwrapped)
-      txData = params;
-    } else if (params.chainId && params.data) {
-      // Format 3: { chainId, data, ... } (alternative format)
-      txData = params;
-    } else if (typeof params === "object" && Object.keys(params).length > 0) {
-      // Format 4: Try to use the params directly if it looks like transaction data
-      console.log(
-        `[requestUserSignature] Attempting to use params as transaction data`
-      );
-      txData = params;
-    } else if (typeof params === "string") {
-      // Format 5: JSON string
-      try {
-        txData = JSON.parse(params);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (err) {
-        throw new Error("Invalid JSON string for encoded transaction");
-      }
-    } else {
+    if (!value && value !== 0) {
       throw new Error(
-        `Invalid parameter format. You must provide both 'encodedTransaction' and 'description' parameters.
-
-RECEIVED: ${JSON.stringify(params)}
-
-REQUIRED FORMAT:
-{
-  encodedTransaction: <complete result from encodeTransaction>,
-  description: "Human readable description"
-}
-
-EXAMPLE:
-{
-  encodedTransaction: {
-    chainId: "solana",
-    transaction: { data: {...}, encoded: [...] },
-    status: { errors: [], warnings: [] }
-  },
-  description: "Send 0.01 SOL to address"
-}`
-      );
-    }
-
-    console.log(
-      `[requestUserSignature] Processed txData:`,
-      JSON.stringify(txData, null, 2)
-    );
-
-    // Validate the transaction data structure
-    if (!txData) {
-      throw new Error("No transaction data provided");
-    }
-
-    // Handle different transaction data structures
-    let tx;
-    let chainId;
-
-    if (txData.transaction) {
-      // Standard format: { chainId, transaction: { data, encoded }, status }
-      tx = txData.transaction;
-      chainId = txData.chainId;
-    } else if (txData.data || txData.encoded) {
-      // Direct format: { chainId, data, encoded }
-      tx = txData;
-      chainId = txData.chainId;
-    } else {
-      throw new Error(
-        `Invalid transaction format. Expected transaction object with 'data' and 'encoded' fields. 
-
-RECEIVED KEYS: ${JSON.stringify(Object.keys(txData))}
-
-EXPECTED STRUCTURE:
-{
-  chainId: "solana",
-  transaction: {
-    data: { mode: "transfer", ... },
-    encoded: [{ raw: { value: "..." } }]
-  },
-  status: { errors: [], warnings: [] }
-}`
+        "Missing 'value' parameter - transaction amount is required"
       );
     }
 
     if (!chainId) {
-      throw new Error("Missing chainId in transaction data");
+      throw new Error("Missing 'chainId' parameter - chain ID is required");
     }
 
-    // Find the hash to sign from the encoded items
-    if (!tx.encoded || !Array.isArray(tx.encoded)) {
+    // Ensure chainId is EVM compatible (since we're using Privy sendTransaction)
+    const evmChains = [
+      "ethereum",
+      "sepolia",
+      "holesky",
+      "base",
+      "base-sepolia",
+      "optimism",
+      "optimism-sepolia",
+      "arbitrum",
+      "arbitrum-sepolia",
+      "polygon",
+      "polygon-amoy",
+      "bsc",
+      "bsc-testnet",
+      "avalanche",
+      "avalanche-fuji",
+      "zksync",
+      "zksync-sepolia",
+      "linea",
+      "linea-sepolia",
+      "gnosis",
+      "gnosis-chiado",
+      "moonbeam",
+      "moonriver",
+      "moonbase",
+      "fantom",
+      "mantle",
+      "rootstock",
+      "rootstock-testnet",
+      "chiliz",
+      "chiliz-testnet",
+      "cronos",
+      "world-chain",
+      "monad-testnet",
+      "berachain",
+      "berachain-bepolia",
+      "injective-evm-testnet",
+    ];
+
+    if (!evmChains.includes(chainId)) {
       throw new Error(
-        `No encoded items found in transaction. Available fields: ${Object.keys(
-          tx
-        )}`
+        `Chain ${chainId} is not supported for Privy sendTransaction. ` +
+          `Supported EVM chains: ${evmChains.join(", ")}`
       );
     }
-
-    let hashToSign: string | null = null;
-
-    // Look for the hash in different possible locations
-    for (const item of tx.encoded) {
-      if (item.payload) {
-        // Direct payload field
-        hashToSign = item.payload;
-        break;
-      } else if (item.raw && item.raw.value) {
-        // Adamik format: raw.value contains the serialized transaction
-        hashToSign = item.raw.value;
-        break;
-      } else if (item.value) {
-        // Alternative format
-        hashToSign = item.value;
-        break;
-      }
-    }
-
-    if (!hashToSign) {
-      console.error(
-        `[requestUserSignature] No hash found. Available structure:`,
-        JSON.stringify(tx.encoded, null, 2)
-      );
-      throw new Error(
-        "No hash found to sign in encoded transaction. Check the encoded items structure."
-      );
-    }
-
-    // Get the user's wallet for this chain
-    const chainType = getChainTypeFromChainId(chainId);
 
     console.log(
-      `[requestUserSignature] Chain ID: ${chainId}, Chain Type: ${chainType}`
+      `[requestUserSignature] Validated EVM transaction for chain: ${chainId}`
     );
 
-    // Prepare transaction for client-side signing
-    const signingRequest = {
+    // Prepare transaction request for Privy
+    const transactionRequest = {
+      to,
+      value: value.toString(), // Ensure string format for Privy
       chainId,
-      chainType,
-      description,
-      encodedTransaction: txData,
-      hashToSign,
-      status: "pending_signature",
+      ...(data && { data }),
+      ...(gasLimit && { gasLimit }),
     };
 
     console.log(
-      `[requestUserSignature] Transaction prepared for client-side signing`
+      `[requestUserSignature] Transaction prepared for Privy sendTransaction`
     );
 
-    // Return a special response that the frontend will recognize as a signing request
+    // Return a transaction request that the frontend will recognize
     const response = {
-      type: "signing_request",
-      data: signingRequest,
-      message: `Transaction ready for signing. ${description}`,
+      type: "transaction_request",
+      data: transactionRequest,
+      message: `Transaction ready for sending. ${
+        description || "Please review and confirm the transaction."
+      }`,
     };
 
     const text = JSON.stringify(response);
@@ -1019,22 +922,40 @@ CRITICAL: Always include the "mode" field - it's required for schema validation!
     type: "function" as const,
     name: "requestUserSignature",
     description:
-      "Requests the user to sign an encoded transaction using their wallet. Takes the COMPLETE output from encodeTransaction and prepares it for client-side signing. The user will be prompted to review and sign the transaction in their wallet interface.",
+      "Sends a transaction using Privy's sendTransaction for EVM chains. This bypasses the need for encoding and manual signing by using Privy's built-in transaction flow. Much simpler and more reliable than the previous approach.",
     parameters: {
       type: "object",
       properties: {
-        encodedTransaction: {
-          type: "object",
+        to: {
+          type: "string",
+          description: "The recipient address for the transaction",
+        },
+        value: {
+          type: "string",
           description:
-            "The COMPLETE encoded transaction object returned from encodeTransaction - pass the entire JSON result including chainId, transaction.data, transaction.encoded, and status fields",
+            "The amount to send in wei (smallest unit) as a string. For ETH: 1 ETH = 1000000000000000000 wei",
+        },
+        chainId: {
+          type: "string",
+          description:
+            "The EVM chain ID (e.g., 'ethereum', 'polygon', 'base', 'arbitrum')",
+        },
+        data: {
+          type: "string",
+          description:
+            "Optional transaction data for smart contract interactions (hex string)",
+        },
+        gasLimit: {
+          type: "string",
+          description: "Optional gas limit for the transaction",
         },
         description: {
           type: "string",
           description:
-            "A human-readable description of what this transaction will do (e.g., 'Send 0.1 SOL to Alice', 'Stake 5 SOL with validator XYZ'). This will be shown to the user when they are asked to sign.",
+            "A human-readable description of what this transaction will do (e.g., 'Send 0.1 ETH to Alice'). This will be shown to the user when they are asked to confirm.",
         },
       },
-      required: ["encodedTransaction", "description"],
+      required: ["to", "value", "chainId", "description"],
       additionalProperties: false,
     },
   },

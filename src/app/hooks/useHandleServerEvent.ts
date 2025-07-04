@@ -4,8 +4,7 @@ import { useRef } from "react";
 import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
-import { usePrivy } from "@privy-io/react-auth";
-import { useSignRawHash } from "@privy-io/react-auth/extended-chains";
+import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
 
 export interface UseHandleServerEventParams {
   setSessionStatus: (status: SessionStatus) => void;
@@ -16,7 +15,6 @@ export interface UseHandleServerEventParams {
   shouldForceResponse?: boolean;
   setIsOutputAudioBufferActive: (active: boolean) => void;
   userContext?: { userId: string; walletAddress?: string };
-  setSigningRequest?: (request: any) => void;
 }
 
 export function useHandleServerEvent({
@@ -27,7 +25,6 @@ export function useHandleServerEvent({
   setSelectedAgentName,
   setIsOutputAudioBufferActive,
   userContext,
-  setSigningRequest,
 }: UseHandleServerEventParams) {
   const {
     transcriptItems,
@@ -39,7 +36,7 @@ export function useHandleServerEvent({
 
   const { logServerEvent } = useEvent();
   const { user } = usePrivy();
-  const { signRawHash } = useSignRawHash();
+  const { sendTransaction } = useSendTransaction();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
 
@@ -48,6 +45,10 @@ export function useHandleServerEvent({
     call_id?: string;
     arguments: string;
   }) => {
+    console.log(
+      "🔍 [useHandleServerEvent] handleFunctionCall called with:",
+      functionCallParams.name
+    );
     const args = JSON.parse(functionCallParams.arguments);
     const currentAgent = selectedAgentConfigSet?.find(
       (a) => a.name === selectedAgentName
@@ -70,6 +71,7 @@ export function useHandleServerEvent({
 
       // PATCH: Handle signing requests from requestUserSignature - Skip custom modal, go directly to Privy
       if (functionCallParams.name === "requestUserSignature") {
+        console.log("🔍 [useHandleServerEvent] requestUserSignature called");
         try {
           const resultText = fnResult.content?.[0]?.text || "{}";
           console.log("[handleFunctionCall] Raw result text:", resultText);
@@ -98,115 +100,114 @@ export function useHandleServerEvent({
             throw parseError;
           }
 
-          if (result.type === "signing_request" && result.data) {
+          console.log("🔍 [useHandleServerEvent] Parsed result:", result);
+          console.log("🔍 [useHandleServerEvent] Result type:", result.type);
+
+          if (result.type === "transaction_request" && result.data) {
             console.log(
-              "[handleFunctionCall] Processing signing request directly with Privy signRawHash"
+              "🔍 [useHandleServerEvent] Processing transaction request - using Privy sendTransaction"
             );
 
-            // Check if user is authenticated and signRawHash is available
-            if (!user || !signRawHash) {
-              const errorMessage =
-                "User not authenticated or signRawHash not available";
-              console.error("[handleFunctionCall]", errorMessage);
-              sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                  type: "function_call_output",
-                  call_id: functionCallParams.call_id,
-                  output: `Error: ${errorMessage}`,
-                },
-              });
-              sendClientEvent({ type: "response.create" });
-              return;
-            }
+            // Debug authentication status
+            console.log(
+              "🔍 [useHandleServerEvent] User authenticated:",
+              !!user
+            );
+            console.log("🔍 [useHandleServerEvent] User ID:", user?.id);
+            console.log(
+              "🔍 [useHandleServerEvent] sendTransaction available:",
+              !!sendTransaction
+            );
+            console.log("🔍 [useHandleServerEvent] userContext:", userContext);
 
+            // Use Privy's sendTransaction for clean EVM transaction handling
             try {
-              console.log("🔐 Starting direct Privy signRawHash...");
-              console.log("Transaction to sign:", result.data);
+              const transactionData = result.data;
+              console.log(
+                "🔍 [useHandleServerEvent] Transaction data:",
+                transactionData
+              );
 
-              // Get the wallet address from user context or the signing request
-              const walletAddress =
-                userContext?.walletAddress ||
-                result.data.encodedTransaction?.senderAddress ||
-                result.data.encodedTransaction?.transaction?.data
-                  ?.senderAddress;
+              // Extract transaction parameters
+              const { to, value, chainId, data, gasLimit } = transactionData;
 
-              if (!walletAddress) {
-                throw new Error("No wallet address available for signing");
-              }
-
-              // Prepare the hash for signing
-              let hashToSign = result.data.hashToSign;
-
-              // Ensure the hash has 0x prefix for all chains
-              if (!hashToSign.startsWith("0x")) {
-                hashToSign = "0x" + hashToSign;
-              }
-
-              console.log("Hash to sign:", hashToSign);
-              console.log("Wallet address:", walletAddress);
-              console.log("Chain type:", result.data.chainType);
-
-              // Sign the transaction hash using Privy's signRawHash
-              const signResult = await signRawHash({
-                address: walletAddress,
-                chainType: result.data.chainType,
-                hash: hashToSign,
+              console.log("🔍 [useHandleServerEvent] Transaction params:", {
+                to,
+                value,
+                chainId,
+                data,
+                gasLimit,
               });
 
-              console.log("✅ Transaction signed successfully:", signResult);
+              if (!to) {
+                throw new Error("No recipient address found");
+              }
 
-              // Create a broadcast request with the signed transaction
-              const broadcastData = {
-                encodedTransaction: result.data.encodedTransaction,
-                signature: signResult.signature,
+              if (!value && value !== 0) {
+                throw new Error("No transaction value found");
+              }
+
+              // Build transaction request for Privy
+              const transactionRequest = {
+                to,
+                value: value.toString(), // Ensure string format
+                ...(data && { data }),
+                ...(gasLimit && { gasLimit }),
               };
 
-              // Send the broadcast request to the voice agent
-              const broadcastMessage = `Transaction has been signed successfully! Here is the signed transaction data: ${JSON.stringify(
-                broadcastData
-              )}. Please call the broadcastTransaction function to submit this to the blockchain.`;
+              console.log(
+                "🔍 [useHandleServerEvent] Calling sendTransaction..."
+              );
 
-              // Send a response to the agent that the signing is complete
+              // Use Privy's sendTransaction - it handles everything!
+              const transactionResult = await sendTransaction(
+                transactionRequest,
+                {
+                  address: userContext?.walletAddress, // Specify which wallet to use
+                }
+              );
+
+              console.log(
+                "✅ [useHandleServerEvent] Transaction successful:",
+                transactionResult
+              );
+
+              // Send successful response back to the agent
               sendClientEvent({
                 type: "conversation.item.create",
                 item: {
                   type: "function_call_output",
                   call_id: functionCallParams.call_id,
-                  output: `Transaction signed successfully. Signature: ${signResult.signature}`,
+                  output: JSON.stringify({
+                    success: true,
+                    transactionHash: transactionResult.hash,
+                    to: to,
+                    value: value,
+                    chainId: chainId,
+                  }),
                 },
               });
-
-              // Send a simulated user message to inform the agent about the successful signing
-              sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                  type: "message",
-                  role: "user",
-                  content: [
-                    {
-                      type: "input_text",
-                      text: broadcastMessage,
-                    },
-                  ],
-                },
-              });
-
               sendClientEvent({ type: "response.create" });
               return;
-            } catch (signingError) {
-              console.error("❌ Error signing transaction:", signingError);
-              const errorMessage =
-                signingError instanceof Error
-                  ? signingError.message
-                  : "Failed to sign transaction";
+            } catch (error) {
+              console.error(
+                "❌ [useHandleServerEvent] Transaction failed:",
+                error
+              );
 
+              // Send error response back to the agent
               sendClientEvent({
                 type: "conversation.item.create",
                 item: {
                   type: "function_call_output",
                   call_id: functionCallParams.call_id,
-                  output: `Error signing transaction: ${errorMessage}`,
+                  output: JSON.stringify({
+                    success: false,
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                    details:
+                      "Transaction failed. Please check your wallet and try again.",
+                  }),
                 },
               });
               sendClientEvent({ type: "response.create" });
@@ -214,7 +215,10 @@ export function useHandleServerEvent({
             }
           }
         } catch (error) {
-          console.error("Error handling signing request:", error);
+          console.error(
+            "❌ [useHandleServerEvent] Error handling signing request:",
+            error
+          );
         }
       }
 
@@ -257,57 +261,7 @@ export function useHandleServerEvent({
         return;
       }
 
-      // PATCH: Handle automatic continuation for encodeTransaction
-      if (functionCallParams.name === "encodeTransaction") {
-        try {
-          const resultText = fnResult.content?.[0]?.text || "{}";
-          const result = JSON.parse(resultText);
-
-          // Check if this looks like a successful encode result
-          if (
-            result.chainId &&
-            result.transaction &&
-            result.transaction.encoded
-          ) {
-            console.log(
-              "[handleFunctionCall] encodeTransaction successful, suggesting next step"
-            );
-
-            // Send the result first
-            sendClientEvent({
-              type: "conversation.item.create",
-              item: {
-                type: "function_call_output",
-                call_id: functionCallParams.call_id,
-                output: JSON.stringify(fnResult),
-              },
-            });
-
-            // Then suggest the next step
-            sendClientEvent({
-              type: "conversation.item.create",
-              item: {
-                type: "message",
-                role: "user",
-                content: [
-                  {
-                    type: "input_text",
-                    text: "Now please call requestUserSignature with the encoded transaction result and an appropriate description.",
-                  },
-                ],
-              },
-            });
-
-            sendClientEvent({ type: "response.create" });
-            return;
-          }
-        } catch (error) {
-          console.error(
-            "Error handling encodeTransaction continuation:",
-            error
-          );
-        }
-      }
+      // Note: encodeTransaction automatic continuation removed - now using Privy sendTransaction directly
 
       // Default: send raw JSON/text for other tools
       sendClientEvent({
@@ -363,6 +317,10 @@ export function useHandleServerEvent({
   };
 
   const handleServerEvent = (serverEvent: ServerEvent) => {
+    console.log(
+      "🔍 [useHandleServerEvent] Received server event:",
+      serverEvent.type
+    );
     logServerEvent(serverEvent);
 
     switch (serverEvent.type) {
@@ -438,13 +396,27 @@ export function useHandleServerEvent({
       }
 
       case "response.done": {
+        console.log("🔍 [useHandleServerEvent] response.done event received");
         if (serverEvent.response?.output) {
+          console.log(
+            "🔍 [useHandleServerEvent] Found output items:",
+            serverEvent.response.output.length
+          );
           serverEvent.response.output.forEach((outputItem) => {
+            console.log(
+              "🔍 [useHandleServerEvent] Processing output item:",
+              outputItem.type,
+              outputItem.name
+            );
             if (
               outputItem.type === "function_call" &&
               outputItem.name &&
               outputItem.arguments
             ) {
+              console.log(
+                "🔍 [useHandleServerEvent] Calling handleFunctionCall for:",
+                outputItem.name
+              );
               handleFunctionCall({
                 name: outputItem.name,
                 call_id: outputItem.call_id,
@@ -452,6 +424,10 @@ export function useHandleServerEvent({
               }).catch(() => {});
             }
           });
+        } else {
+          console.log(
+            "🔍 [useHandleServerEvent] No output items found in response.done"
+          );
         }
         break;
       }
