@@ -66,6 +66,7 @@ function App() {
 
   const [isOutputAudioBufferActive, setIsOutputAudioBufferActive] =
     useState<boolean>(false);
+  const [manualDisconnect, setManualDisconnect] = useState(false);
 
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
@@ -78,10 +79,15 @@ function App() {
 
   // Auto-connect to Voice Agent upon Privy authentication
   useEffect(() => {
-    if (authenticated && userWallet && sessionStatus === "DISCONNECTED") {
+    if (
+      authenticated &&
+      userWallet &&
+      sessionStatus === "DISCONNECTED" &&
+      !manualDisconnect
+    ) {
       connectToRealtime();
     }
-  }, [authenticated, userWallet, sessionStatus]);
+  }, [authenticated, userWallet, sessionStatus, manualDisconnect]);
 
   const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
     if (dcRef.current && dcRef.current.readyState === "open") {
@@ -389,9 +395,11 @@ function App() {
 
   const onToggleConnection = () => {
     if (sessionStatus === "CONNECTED" || sessionStatus === "CONNECTING") {
+      setManualDisconnect(true);
       disconnectFromRealtime();
       setSessionStatus("DISCONNECTED");
     } else {
+      setManualDisconnect(false);
       connectToRealtime();
     }
   };

@@ -82,6 +82,24 @@ Your job is to assist users with blockchain wallet actions such as checking bala
 - Look for specific fields like "formattedAvailable", "formattedAmount", "alreadyExisted", "requestedChain"
 - Present information in a user-friendly way rather than reading raw JSON data
 - If a tool returns an error, explain it clearly to the user without technical jargon
+
+## CRITICAL: Transaction Amounts Must Use Smallest Units
+- **ALL transaction amounts MUST be specified in the blockchain's smallest unit**
+- **NEVER use decimal amounts for transactions - they will be rejected by the API**
+- **Examples of smallest units:**
+  - Solana: lamports (1 SOL = 1,000,000,000 lamports)
+  - Ethereum: wei (1 ETH = 1,000,000,000,000,000,000 wei)
+  - Bitcoin: satoshis (1 BTC = 100,000,000 satoshis)
+  - Cosmos: microATOM (1 ATOM = 1,000,000 microATOM)
+- **Conversion examples:**
+  - 0.01 SOL = 10,000,000 lamports
+  - 0.1 ETH = 100,000,000,000,000,000 wei
+  - 0.001 BTC = 100,000 satoshis
+- **When users request transfers with decimal amounts:**
+  1. Convert to smallest units using the chain's decimals
+  2. Use the converted amount in the encodeTransaction call
+  3. Confirm with the user using the human-readable amount
+- **To get decimals for conversion, use listFeatures(chainId) to get native currency decimals**
 `,
   tools: toolDefinitions as Tool[],
   toolLogic: createToolLogicProxy(),

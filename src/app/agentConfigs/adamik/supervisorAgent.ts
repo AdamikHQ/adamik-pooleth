@@ -13,6 +13,10 @@ import {
   GetTransactionDetailsPathParams,
   PubkeyToAddressPathParams,
   PubkeyToAddressRequestBody,
+  EncodeTransactionPathParams,
+  EncodeTransactionRequestBody,
+  EncodeTransactionRequestBodySchema,
+  EncodeTransactionResponse,
 } from "./schemas";
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
@@ -274,6 +278,81 @@ const toolLogic: Record<string, any> = {
     return { content: [{ type: "text", text }] };
   },
   // Add more tool implementations as needed
+  encodeTransaction: async (
+    { chainId, body }: { chainId: string; body: any },
+    _userContext?: any
+  ) => {
+    // Make maximally flexible: wrap as needed and map common field names
+    let candidate = body;
+
+    // Map common field names to schema-expected names
+    if (candidate.type && !candidate.mode) {
+      candidate.mode = candidate.type;
+      delete candidate.type;
+    }
+    if (candidate.recipient && !candidate.recipientAddress) {
+      candidate.recipientAddress = candidate.recipient;
+      delete candidate.recipient;
+    }
+    if (candidate.sender && !candidate.senderAddress) {
+      candidate.senderAddress = candidate.sender;
+      delete candidate.sender;
+    }
+    if (candidate.from && !candidate.senderAddress) {
+      candidate.senderAddress = candidate.from;
+      delete candidate.from;
+    }
+    if (candidate.to && !candidate.recipientAddress) {
+      candidate.recipientAddress = candidate.to;
+      delete candidate.to;
+    }
+
+    // If senderAddress is missing for transfer transactions, get it from user's wallet
+    if (
+      (candidate.mode === "transfer" || candidate.mode === "transferToken") &&
+      !candidate.senderAddress &&
+      _userContext
+    ) {
+      try {
+        const addressResult = await makeWalletRequest(
+          "getAddress",
+          {},
+          _userContext
+        );
+        if (addressResult && addressResult.address) {
+          candidate.senderAddress = addressResult.address;
+        }
+      } catch (error) {
+        console.warn(
+          "Could not get user's wallet address for senderAddress:",
+          error
+        );
+      }
+    }
+
+    if (!candidate.transaction) {
+      candidate = { transaction: body };
+    }
+    if (!candidate.transaction.data) {
+      candidate = { transaction: { data: body } };
+    }
+    let parsedBody;
+    try {
+      parsedBody = EncodeTransactionRequestBodySchema.parse(candidate);
+    } catch (err) {
+      throw new Error(
+        "Invalid encodeTransaction body. Must match EncodeTransactionRequestBodySchema. " +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+    const result = await makeProxyRequest(
+      `/${chainId}/transaction/encode`,
+      "POST",
+      JSON.stringify({ transaction: parsedBody.transaction })
+    );
+    const text = JSON.stringify(result);
+    return { content: [{ type: "text", text }] };
+  },
 };
 
 // Tool definitions for OpenAI function calling (names, descriptions, schemas)
@@ -459,6 +538,24 @@ export const toolDefinitions = [
       },
       additionalProperties: false,
       required: ["chainId", "transactionId"],
+    },
+  },
+  {
+    type: "function" as const,
+    name: "encodeTransaction",
+    description:
+      "Turns a transaction intent in Adamik JSON format into an encoded transaction for the given chain (ready to sign). Supports all transaction types: transfer, transferToken, stake, unstake, claimRewards, withdraw, registerStake, convertAsset, and deployAccount.",
+    parameters: {
+      type: "object",
+      properties: {
+        chainId: {
+          type: "string",
+          description: "The ID of the blockchain network",
+        },
+        body: EncodeTransactionRequestBodySchema,
+      },
+      required: ["chainId", "body"],
+      additionalProperties: false,
     },
   },
   // {
