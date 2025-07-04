@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
-import { usePrivy, useSendTransaction } from "@privy-io/react-auth";
+import { useSendTransaction } from "@privy-io/react-auth";
 
 export interface UseHandleServerEventParams {
   setSessionStatus: (status: SessionStatus) => void;
@@ -35,7 +35,6 @@ export function useHandleServerEvent({
   } = useTranscript();
 
   const { logServerEvent } = useEvent();
-  const { user } = usePrivy();
   const { sendTransaction } = useSendTransaction();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
@@ -45,10 +44,6 @@ export function useHandleServerEvent({
     call_id?: string;
     arguments: string;
   }) => {
-    console.log(
-      "🔍 [useHandleServerEvent] handleFunctionCall called with:",
-      functionCallParams.name
-    );
     const args = JSON.parse(functionCallParams.arguments);
     const currentAgent = selectedAgentConfigSet?.find(
       (a) => a.name === selectedAgentName
@@ -69,20 +64,20 @@ export function useHandleServerEvent({
         fnResult
       );
 
-      // PATCH: Handle signing requests from requestUserSignature - Skip custom modal, go directly to Privy
+      // Handle transaction requests from requestUserSignature
       if (functionCallParams.name === "requestUserSignature") {
-        console.log("🔍 [useHandleServerEvent] requestUserSignature called");
         try {
           const resultText = fnResult.content?.[0]?.text || "{}";
-          console.log("[handleFunctionCall] Raw result text:", resultText);
 
           // Try to parse the result
           let result;
           try {
             result = JSON.parse(resultText);
           } catch (parseError) {
-            console.error("[handleFunctionCall] JSON parse error:", parseError);
-            console.error("[handleFunctionCall] Failed to parse:", resultText);
+            console.error(
+              "Failed to parse requestUserSignature result:",
+              resultText
+            );
 
             // If it's an error message, show it to the user
             if (resultText.startsWith("Error:")) {
@@ -100,44 +95,11 @@ export function useHandleServerEvent({
             throw parseError;
           }
 
-          console.log("🔍 [useHandleServerEvent] Parsed result:", result);
-          console.log("🔍 [useHandleServerEvent] Result type:", result.type);
-
           if (result.type === "transaction_request" && result.data) {
-            console.log(
-              "🔍 [useHandleServerEvent] Processing transaction request - using Privy sendTransaction"
-            );
-
-            // Debug authentication status
-            console.log(
-              "🔍 [useHandleServerEvent] User authenticated:",
-              !!user
-            );
-            console.log("🔍 [useHandleServerEvent] User ID:", user?.id);
-            console.log(
-              "🔍 [useHandleServerEvent] sendTransaction available:",
-              !!sendTransaction
-            );
-            console.log("🔍 [useHandleServerEvent] userContext:", userContext);
-
-            // Use Privy's sendTransaction for clean EVM transaction handling
+            // Use Privy's sendTransaction for EVM transaction handling
             try {
               const transactionData = result.data;
-              console.log(
-                "🔍 [useHandleServerEvent] Transaction data:",
-                transactionData
-              );
-
-              // Extract transaction parameters
               const { to, value, chainId, data, gasLimit } = transactionData;
-
-              console.log("🔍 [useHandleServerEvent] Transaction params:", {
-                to,
-                value,
-                chainId,
-                data,
-                gasLimit,
-              });
 
               if (!to) {
                 throw new Error("No recipient address found");
@@ -150,27 +112,20 @@ export function useHandleServerEvent({
               // Build transaction request for Privy
               const transactionRequest = {
                 to,
-                value: value.toString(), // Ensure string format
+                value: value.toString(),
                 ...(data && { data }),
                 ...(gasLimit && { gasLimit }),
               };
 
-              console.log(
-                "🔍 [useHandleServerEvent] Calling sendTransaction..."
-              );
-
-              // Use Privy's sendTransaction - it handles everything!
+              // Use Privy's sendTransaction
               const transactionResult = await sendTransaction(
                 transactionRequest,
                 {
-                  address: userContext?.walletAddress, // Specify which wallet to use
+                  address: userContext?.walletAddress,
                 }
               );
 
-              console.log(
-                "✅ [useHandleServerEvent] Transaction successful:",
-                transactionResult
-              );
+              console.log("Transaction successful:", transactionResult.hash);
 
               // Send successful response back to the agent
               sendClientEvent({
@@ -190,10 +145,7 @@ export function useHandleServerEvent({
               sendClientEvent({ type: "response.create" });
               return;
             } catch (error) {
-              console.error(
-                "❌ [useHandleServerEvent] Transaction failed:",
-                error
-              );
+              console.error("Transaction failed:", error);
 
               // Send error response back to the agent
               sendClientEvent({
@@ -215,14 +167,11 @@ export function useHandleServerEvent({
             }
           }
         } catch (error) {
-          console.error(
-            "❌ [useHandleServerEvent] Error handling signing request:",
-            error
-          );
+          console.error("Error handling transaction request:", error);
         }
       }
 
-      // PATCH: Custom user-friendly message for createWallet
+      // Custom user-friendly message for createWallet
       if (functionCallParams.name === "createWallet") {
         let userMessage = "";
         try {
@@ -260,8 +209,6 @@ export function useHandleServerEvent({
         sendClientEvent({ type: "response.create" });
         return;
       }
-
-      // Note: encodeTransaction automatic continuation removed - now using Privy sendTransaction directly
 
       // Default: send raw JSON/text for other tools
       sendClientEvent({
@@ -317,10 +264,6 @@ export function useHandleServerEvent({
   };
 
   const handleServerEvent = (serverEvent: ServerEvent) => {
-    console.log(
-      "🔍 [useHandleServerEvent] Received server event:",
-      serverEvent.type
-    );
     logServerEvent(serverEvent);
 
     switch (serverEvent.type) {
@@ -396,27 +339,13 @@ export function useHandleServerEvent({
       }
 
       case "response.done": {
-        console.log("🔍 [useHandleServerEvent] response.done event received");
         if (serverEvent.response?.output) {
-          console.log(
-            "🔍 [useHandleServerEvent] Found output items:",
-            serverEvent.response.output.length
-          );
           serverEvent.response.output.forEach((outputItem) => {
-            console.log(
-              "🔍 [useHandleServerEvent] Processing output item:",
-              outputItem.type,
-              outputItem.name
-            );
             if (
               outputItem.type === "function_call" &&
               outputItem.name &&
               outputItem.arguments
             ) {
-              console.log(
-                "🔍 [useHandleServerEvent] Calling handleFunctionCall for:",
-                outputItem.name
-              );
               handleFunctionCall({
                 name: outputItem.name,
                 call_id: outputItem.call_id,
@@ -424,10 +353,6 @@ export function useHandleServerEvent({
               }).catch(() => {});
             }
           });
-        } else {
-          console.log(
-            "🔍 [useHandleServerEvent] No output items found in response.done"
-          );
         }
         break;
       }

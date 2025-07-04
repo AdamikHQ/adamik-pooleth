@@ -122,7 +122,6 @@ nano test-wallet-api.sh
 - `getAddress` - Get wallet address for specific chain
 - `getPubKey` - Get public key for address derivation
 - `getWalletForAdamik` - Get wallet data optimized for Adamik
-- `rawSign` - Sign transaction hashes
 
 **Example Commands:**
 
@@ -244,7 +243,7 @@ Our testing confirmed the system works perfectly with real multi-chain wallets:
 - `createWallet`: Creates new wallets with proper base type mapping
 - `getPubKey`: Correctly handles Privy's security model (no public key exposure)
 - `getWalletForAdamik`: Returns properly formatted wallet data for Adamik API
-- `rawSign`: Available for transaction signing operations
+- `requestUserSignature`: Available for EVM transaction processing
 
 **Multi-Chain Support (5/5 ✅)**:
 
@@ -488,6 +487,6 @@ These same endpoints are used by the Adamik agent tools:
 
 - `getPubKey` tool → `/api/wallet` with action `getPubKey`
 - `getAddress` tool → `/api/wallet` with action `getAddress`
-- `signTransaction` tool → `/api/wallet` with action `rawSign`
+- `requestUserSignature` tool → `/api/wallet` with action `requestUserSignature`
 
 By testing these endpoints directly, you're validating the same code paths the voice agent uses.

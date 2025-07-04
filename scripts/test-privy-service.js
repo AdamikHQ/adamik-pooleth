@@ -49,13 +49,13 @@ async function testPrivyService() {
       });
 
       if (foundEVMWallets.length === 0) {
-        console.log("⚠️  No EVM wallets found - transactions won't work");
+        console.log("⚠️  No EVM wallets found - create one first");
       }
     } catch (error) {
       console.log("❌ Error listing wallets:", error.message);
     }
 
-    // Test 3: Test wallet data for Adamik (balance reading only)
+    // Test 3: Test wallet data for Adamik (balance reading)
     console.log("\n3. 🛠️ Testing wallet data for balance reading...");
     try {
       const adamikWallet = await privyService.getWalletForAdamik(TEST_USER_ID, {
@@ -73,10 +73,11 @@ async function testPrivyService() {
       console.log("❌ Error getting wallet data:", error.message);
     }
 
-    console.log("\n📝 Notes:");
-    console.log("• Raw signing removed - using Privy sendTransaction");
+    console.log("\n📝 Summary:");
+    console.log("• Using Privy sendTransaction for EVM transactions");
     console.log("• Only EVM chains supported for transactions");
-    console.log("• Adamik still used for balance reading");
+    console.log("• Adamik used for balance reading and multi-chain support");
+    console.log("• No manual encoding or signing required");
   } catch (error) {
     console.error("❌ Failed to import or test service:", error.message);
   }

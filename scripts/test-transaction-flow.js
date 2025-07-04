@@ -3,10 +3,10 @@
 /**
  * Test Simplified Transaction Flow (Privy sendTransaction)
  *
- * This script tests the new simplified transaction flow:
+ * This script tests the simplified transaction flow:
  * 1. Call requestUserSignature directly with transaction parameters
  * 2. Verify it returns transaction_request for Privy sendTransaction
- * 3. No encoding or raw signing needed
+ * 3. Privy handles encoding, signing, and broadcasting automatically
  */
 
 const TEST_USER_ID = "did:privy:cmcnvwtdj00o7l20mlzwvr5qd";
@@ -102,7 +102,7 @@ async function testTransactionFlow() {
         userId: TEST_USER_ID,
         to: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
         value: "10000000",
-        chainId: "solana", // Not supported in new flow
+        chainId: "solana", // Not supported in simplified flow
         description: "Send SOL (should fail)",
       }),
     });

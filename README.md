@@ -26,7 +26,7 @@ A sophisticated voice-enabled blockchain assistant powered by OpenAI's Realtime 
 - **Embedded Wallets**: Secure, user-specific wallet creation and management
 - **Multi-User Support**: Individual user sessions with personal wallet access
 - **Authentication Guards**: Protected routes ensuring secure access
-- **Wallet Integration**: Seamless blockchain transaction signing
+- **EVM Transactions**: Secure transaction processing via Privy's built-in modal
 
 ## 🏗️ Architecture
 
@@ -104,7 +104,7 @@ graph TD
 
 **API Endpoints**:
 
-- **`/api/wallet`**: Wallet operations (keys, signing, addresses)
+- **`/api/wallet`**: Wallet operations (keys, addresses)
 - **`/api/adamik`**: Blockchain data and transaction encoding
 
 #### 3. Service Layer
@@ -118,14 +118,14 @@ All third-party integrations are now centralized in the `src/app/services/` dire
 
 - **Wallet Management**: Create and manage embedded wallets
 - **Key Operations**: Extract public keys for multi-chain address derivation
-- **Transaction Signing**: Raw hash signing for any blockchain
+- **EVM Transactions**: Secure transaction processing via sendTransaction
 - **User Context**: Secure, user-specific wallet operations
 
 **Adamik Service**
 
 - **Chain Operations**: Balance queries, transaction history, validator lists
 - **Transaction Encoding**: Convert transaction intents to signable format
-- **Broadcasting**: Submit signed transactions to blockchain networks
+- **Multi-Chain Support**: Works across all supported blockchain networks
 
 #### 4. Infrastructure Layer
 
@@ -133,7 +133,7 @@ All third-party integrations are now centralized in the `src/app/services/` dire
 
 - **Embedded Wallets**: Secure key storage and management
 - **Authentication**: User login and session management
-- **Cryptographic Operations**: Private key operations and signatures
+- **Transaction Processing**: EVM transaction handling via built-in modal
 
 **Blockchain Networks**
 
@@ -151,7 +151,7 @@ User Login → Privy Authentication → Embedded Wallet Creation → Agent Conne
 
 The connection between the Adamik agent and Privy service works as follows:
 
-1. **Agent Tools**: Defined in agent config (e.g., `getPubKey`, `getAddress`, `signTransaction`)
+1. **Agent Tools**: Defined in agent config (e.g., `getPubKey`, `getAddress`, `requestUserSignature`)
 2. **API Routing**: Tools call `makeWalletRequest()` with user context
 3. **Wallet Endpoint**: `/api/wallet` receives requests and routes to Privy service
 4. **Privy Operations**: Service performs secure wallet operations
@@ -477,7 +477,7 @@ const chatAgent: AgentConfig = {
 - `getAddress`: Get wallet address
 - `listWallets`: List all embedded wallets across different blockchains
 - `createWallet`: Create new embedded wallets for specific blockchain networks
-- `signTransaction`: Sign transaction hashes
+- `requestUserSignature`: Send EVM transactions using Privy's built-in modal
 
 **Blockchain Queries**:
 
@@ -491,7 +491,6 @@ const chatAgent: AgentConfig = {
 **Transaction Operations**:
 
 - `encodeTransaction`: Convert transaction intent to signable format
-- `broadcastTransaction`: Submit signed transactions to blockchain
 - `deriveAddress`: Generate blockchain-specific addresses from public key
 
 ### Adding New Agents
@@ -552,7 +551,7 @@ PRIVY_APP_SECRET=your_privy_app_secret
 - **Multi-Chain Support**: Create wallets for Ethereum, Solana, TRON, Cosmos, and Stellar networks
 - **Chain Mapping**: Automatically map EVM-compatible chains (Base, Arbitrum, etc.) to Ethereum base type
 - **Key Extraction**: Get public keys for multi-chain address derivation
-- **Raw Signing**: Sign transaction hashes for any blockchain
+- **EVM Transactions**: Secure transaction processing via Privy's built-in sendTransaction
 - **Context Handling**: User-specific wallet selection and operations
 
 ## 🎨 UI Components

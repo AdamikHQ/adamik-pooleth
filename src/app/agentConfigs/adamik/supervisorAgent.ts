@@ -14,7 +14,6 @@ import {
   PubkeyToAddressPathParams,
   PubkeyToAddressRequestBody,
   EncodeTransactionRequestBodySchema,
-  BroadcastTransactionRequestBodySchema,
 } from "./schemas";
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
@@ -241,81 +240,34 @@ const toolLogic: Record<string, any> = {
     chainId,
     accountId,
   }: GetAccountStatePathParams) => {
-    console.log(
-      `[getAccountState] Starting request for chainId: ${chainId}, accountId: ${accountId}`
-    );
-
     // 1. Fetch the account state
     const state = await makeProxyRequest(
       `/${chainId}/account/${accountId}/state`
     );
 
-    console.log(
-      `[getAccountState] Raw state response:`,
-      JSON.stringify(state, null, 2)
-    );
-
     // 2. Verify/format native balance decimals
     if (state?.balances?.native && state.balances.native.available != null) {
-      console.log(
-        `[getAccountState] Processing native balance - raw available: ${state.balances.native.available}`
-      );
-
       // Fetch chain features to get native decimals
       const features = await makeProxyRequest(`/chains/${chainId}`);
-      console.log(
-        `[getAccountState] Chain features for ${chainId}:`,
-        JSON.stringify(features, null, 2)
-      );
-
       const decimals = features?.chain?.decimals;
-      console.log(`[getAccountState] Native currency decimals: ${decimals}`);
 
       if (typeof decimals === "number") {
         const rawValue = Number(state.balances.native.available);
         const divisor = Math.pow(10, decimals);
         const formattedValue = rawValue / divisor;
 
-        console.log(
-          `[getAccountState] Decimal calculation - raw: ${rawValue}, divisor: ${divisor}, formatted: ${formattedValue}`
-        );
-
         state.balances.native.formattedAvailable = formattedValue.toString();
         state.balances.native.decimals = decimals;
-
-        console.log(
-          `[getAccountState] Native balance formatted - formattedAvailable: ${state.balances.native.formattedAvailable}`
-        );
-      } else {
-        console.log(
-          `[getAccountState] WARNING: Invalid decimals for native currency: ${decimals}`
-        );
       }
-    } else {
-      console.log(
-        `[getAccountState] No native balance found or available is null`
-      );
     }
 
     // 3. Verify/format token balances decimals
     if (state?.balances?.tokens && Array.isArray(state.balances.tokens)) {
-      console.log(
-        `[getAccountState] Processing ${state.balances.tokens.length} token balances`
-      );
-
       for (const token of state.balances.tokens) {
         if (token.tokenId && token.amount != null) {
-          console.log(
-            `[getAccountState] Processing token ${token.tokenId} - raw amount: ${token.amount}`
-          );
-
           // Fetch token details (including decimals)
           const tokenDetails = await makeProxyRequest(
             `/${chainId}/token/${token.tokenId}`
-          );
-          console.log(
-            `[getAccountState] Token details for ${token.tokenId}:`,
-            JSON.stringify(tokenDetails, null, 2)
           );
 
           if (tokenDetails?.decimals != null) {
@@ -323,32 +275,12 @@ const toolLogic: Record<string, any> = {
             const divisor = Math.pow(10, tokenDetails.decimals);
             const formattedValue = rawValue / divisor;
 
-            console.log(
-              `[getAccountState] Token decimal calculation - raw: ${rawValue}, divisor: ${divisor}, formatted: ${formattedValue}`
-            );
-
             token.formattedAmount = formattedValue.toString();
             token.decimals = tokenDetails.decimals;
-
-            console.log(
-              `[getAccountState] Token balance formatted - formattedAmount: ${token.formattedAmount}`
-            );
-          } else {
-            console.log(
-              `[getAccountState] WARNING: Invalid decimals for token ${token.tokenId}: ${tokenDetails?.decimals}`
-            );
           }
         }
       }
-    } else {
-      console.log(`[getAccountState] No token balances found`);
     }
-
-    // 4. Return the verified/formatted state
-    console.log(
-      `[getAccountState] Final formatted state:`,
-      JSON.stringify(state, null, 2)
-    );
 
     const text = JSON.stringify(state);
     return { content: [{ type: "text", text }] };
@@ -389,7 +321,7 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(transaction);
     return { content: [{ type: "text", text }] };
   },
-  // Add more tool implementations as needed
+  // Encodes transactions for multi-chain blockchain networks
   encodeTransaction: async (
     { chainId, body }: { chainId: string; body: any },
     _userContext?: any
@@ -425,9 +357,6 @@ const toolLogic: Record<string, any> = {
       typeof candidate.amount === "number"
     ) {
       candidate.amount = candidate.amount.toString();
-      console.log(
-        `[encodeTransaction] Converted amount from number to string: ${candidate.amount}`
-      );
     }
 
     // Validate the transaction body early and provide helpful error messages
@@ -436,7 +365,6 @@ const toolLogic: Record<string, any> = {
       const errorMessage = `Transaction validation failed:\n\n${validationErrors.join(
         "\n"
       )}\n\nPlease fix these issues and try again.`;
-      console.log(`[encodeTransaction] Validation failed:`, validationErrors);
       throw new Error(errorMessage);
     }
 
@@ -456,9 +384,6 @@ const toolLogic: Record<string, any> = {
         );
         if (addressResult && addressResult.address) {
           candidate.senderAddress = addressResult.address;
-          console.log(
-            `[encodeTransaction] Auto-populated senderAddress for ${chainId}: ${addressResult.address}`
-          );
         }
       } catch (error) {
         console.warn(
@@ -491,18 +416,12 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
-  // Requests user to send a transaction using Privy's sendTransaction (simplified EVM approach)
+  // Sends EVM transactions using Privy's built-in sendTransaction
   requestUserSignature: async (
     params: any,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userContext?: { userId: string; walletAddress?: string }
   ) => {
-    console.log(`[requestUserSignature] Preparing Privy transaction`);
-    console.log(
-      `[requestUserSignature] Raw params:`,
-      JSON.stringify(params, null, 2)
-    );
-
     // Extract transaction parameters from the request
     const { to, value, chainId, data, gasLimit, description } = params;
 
@@ -568,10 +487,6 @@ const toolLogic: Record<string, any> = {
       );
     }
 
-    console.log(
-      `[requestUserSignature] Validated EVM transaction for chain: ${chainId}`
-    );
-
     // Prepare transaction request for Privy
     const transactionRequest = {
       to,
@@ -580,10 +495,6 @@ const toolLogic: Record<string, any> = {
       ...(data && { data }),
       ...(gasLimit && { gasLimit }),
     };
-
-    console.log(
-      `[requestUserSignature] Transaction prepared for Privy sendTransaction`
-    );
 
     // Return a transaction request that the frontend will recognize
     const response = {
@@ -595,82 +506,6 @@ const toolLogic: Record<string, any> = {
     };
 
     const text = JSON.stringify(response);
-    return { content: [{ type: "text", text }] };
-  },
-  // Broadcasts a signed transaction to the blockchain
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  broadcastTransaction: async (params: any, userContext?: any) => {
-    console.log(
-      `[broadcastTransaction] Broadcasting transaction`,
-      JSON.stringify(params, null, 2)
-    );
-
-    // Handle different parameter formats
-    let broadcastChainId: string;
-    let signedTransaction: any;
-
-    if (params.chainId && params.signedTransaction) {
-      // Format 1: { chainId, signedTransaction }
-      broadcastChainId = params.chainId;
-      signedTransaction = params.signedTransaction;
-    } else if (params.encodedTransaction && params.signature) {
-      // Format 2: { encodedTransaction, signature } (from client-side signing)
-      const encodedTx = params.encodedTransaction;
-      broadcastChainId = encodedTx.chainId;
-      signedTransaction = {
-        ...encodedTx,
-        transaction: {
-          ...encodedTx.transaction,
-          signature: params.signature,
-        },
-      };
-    } else {
-      throw new Error(
-        "Invalid parameters. Expected either { chainId, signedTransaction } or { encodedTransaction, signature }"
-      );
-    }
-
-    console.log(
-      `[broadcastTransaction] Broadcasting to ${broadcastChainId} with signature`
-    );
-
-    if (!signedTransaction || !signedTransaction.transaction) {
-      throw new Error("Invalid signed transaction format");
-    }
-
-    const tx = signedTransaction.transaction;
-    if (!tx.signature) {
-      throw new Error("Transaction is not signed");
-    }
-
-    // Prepare the broadcast request body
-    const broadcastBody = {
-      transaction: {
-        data: tx.data,
-        encoded: tx.encoded,
-        signature: tx.signature,
-      },
-    };
-
-    let parsedBody;
-    try {
-      parsedBody = BroadcastTransactionRequestBodySchema.parse(broadcastBody);
-    } catch (err) {
-      throw new Error(
-        "Invalid broadcast transaction body. " +
-          (err instanceof Error ? err.message : String(err))
-      );
-    }
-
-    const result = await makeProxyRequest(
-      `/${broadcastChainId}/transaction/broadcast`,
-      "POST",
-      JSON.stringify(parsedBody)
-    );
-
-    console.log(`[broadcastTransaction] Transaction broadcast result:`, result);
-
-    const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
 };
@@ -765,16 +600,6 @@ export const toolDefinitions = [
       required: ["chainType"],
     },
   },
-  // {
-  //   type: "function" as const,
-  //   name: "getPubKey",
-  //   description: "Get the wallet public key",
-  //   parameters: {
-  //     type: "object",
-  //     properties: {},
-  //     additionalProperties: false,
-  //   },
-  // },
   {
     type: "function" as const,
     name: "getAccountState",
@@ -922,7 +747,7 @@ CRITICAL: Always include the "mode" field - it's required for schema validation!
     type: "function" as const,
     name: "requestUserSignature",
     description:
-      "Sends a transaction using Privy's sendTransaction for EVM chains. This bypasses the need for encoding and manual signing by using Privy's built-in transaction flow. Much simpler and more reliable than the previous approach.",
+      "Sends a transaction using Privy's sendTransaction for EVM chains. This handles encoding, signing, and broadcasting in a single step.",
     parameters: {
       type: "object",
       properties: {
@@ -959,58 +784,6 @@ CRITICAL: Always include the "mode" field - it's required for schema validation!
       additionalProperties: false,
     },
   },
-  {
-    type: "function" as const,
-    name: "broadcastTransaction",
-    description:
-      "Broadcasts a signed transaction to the blockchain network. Can accept either the traditional format with chainId and signedTransaction, or the client-side format with encodedTransaction and signature.",
-    parameters: {
-      type: "object",
-      properties: {
-        chainId: {
-          type: "string",
-          description:
-            "The ID of the blockchain network (optional if encodedTransaction contains chainId)",
-        },
-        signedTransaction: {
-          type: "object",
-          description:
-            "The signed transaction object (for server-side signed transactions)",
-        },
-        encodedTransaction: {
-          type: "object",
-          description:
-            "The encoded transaction object (for client-side signed transactions)",
-        },
-        signature: {
-          type: "string",
-          description:
-            "The signature from client-side signing (for client-side signed transactions)",
-        },
-      },
-      additionalProperties: false,
-    },
-  },
-  // {
-  //   type: "function" as const,
-  //   name: "deriveAddress",
-  //   description: "Derive blockchain-specific address from public key",
-  //   parameters: {
-  //     type: "object",
-  //     properties: {
-  //       chainId: {
-  //         type: "string",
-  //         description: "The ID of the blockchain network",
-  //       },
-  //       pubkey: {
-  //         type: "string",
-  //         description: "The public key to derive address from",
-  //       },
-  //     },
-  //     additionalProperties: false,
-  //     required: ["chainId", "pubkey"],
-  //   },
-  // },
 ];
 
 // Supervisor agent entry point: executes tool logic for the main agent
@@ -1038,35 +811,18 @@ export const getNextResponseFromSupervisor = {
     const { toolName, params } = input;
     const userContext = _details?.userContext;
 
-    console.log(
-      `[Supervisor] Executing tool: ${toolName} with params:`,
-      JSON.stringify(params, null, 2)
-    );
-    console.log(
-      `[Supervisor] User context:`,
-      JSON.stringify(userContext, null, 2)
-    );
-
     if (!toolName || !(toolName in toolLogic)) {
-      console.log(
-        `[Supervisor] ERROR: Unknown tool or missing toolName: ${toolName}`
-      );
       return {
         content: [{ type: "text", text: "Unknown tool or missing toolName." }],
       };
     }
     try {
       const result = await toolLogic[toolName](params, userContext);
-      console.log(
-        `[Supervisor] Tool ${toolName} result:`,
-        JSON.stringify(result, null, 2)
-      );
       return result;
     } catch (e) {
       const errorMessage = `Error: ${
         e instanceof Error ? e.message : String(e)
       }`;
-      console.log(`[Supervisor] ERROR in tool ${toolName}:`, errorMessage);
       return {
         content: [
           {
