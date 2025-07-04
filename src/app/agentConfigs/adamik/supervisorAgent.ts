@@ -17,6 +17,8 @@ import {
   EncodeTransactionRequestBody,
   EncodeTransactionRequestBodySchema,
   EncodeTransactionResponse,
+  BroadcastTransactionPathParams,
+  BroadcastTransactionRequestBodySchema,
 } from "./schemas";
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
@@ -353,6 +355,124 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
+  // Signs an encoded transaction using Privy's raw signing
+  signTransaction: async (
+    { encodedTransaction }: { encodedTransaction: any },
+    userContext?: { userId: string; walletAddress?: string }
+  ) => {
+    console.log(`[signTransaction] Starting signature process for transaction`);
+
+    if (!encodedTransaction || !encodedTransaction.transaction) {
+      throw new Error("Invalid encoded transaction format");
+    }
+
+    const tx = encodedTransaction.transaction;
+
+    // Find the hash to sign from the encoded items
+    if (!tx.encoded || !Array.isArray(tx.encoded)) {
+      throw new Error("No encoded items found in transaction");
+    }
+
+    let hashToSign: string | null = null;
+    for (const item of tx.encoded) {
+      if (item.payload) {
+        hashToSign = item.payload;
+        break;
+      }
+    }
+
+    if (!hashToSign) {
+      throw new Error("No hash found to sign in encoded transaction");
+    }
+
+    console.log(`[signTransaction] Hash to sign: ${hashToSign}`);
+
+    // Get the user's wallet for this chain
+    const walletResult = await makeWalletRequest(
+      "getWalletForAdamik",
+      {},
+      userContext
+    );
+
+    if (!walletResult || !walletResult.walletId) {
+      throw new Error("No wallet found for signing");
+    }
+
+    console.log(`[signTransaction] Using wallet: ${walletResult.walletId}`);
+
+    // Sign the hash using Privy
+    const signResult = await makeWalletRequest(
+      "rawSign",
+      { hash: hashToSign },
+      userContext
+    );
+
+    if (!signResult || !signResult.signature) {
+      throw new Error("Failed to create signature");
+    }
+
+    console.log(`[signTransaction] Signature created successfully`);
+
+    // Return the signed transaction data ready for broadcast
+    const signedTransaction = {
+      ...encodedTransaction,
+      transaction: {
+        ...tx,
+        signature: signResult.signature,
+      },
+    };
+
+    const text = JSON.stringify(signedTransaction);
+    return { content: [{ type: "text", text }] };
+  },
+  // Broadcasts a signed transaction to the blockchain
+  broadcastTransaction: async (
+    { chainId, signedTransaction }: { chainId: string; signedTransaction: any },
+    _userContext?: any
+  ) => {
+    console.log(
+      `[broadcastTransaction] Broadcasting transaction to ${chainId}`
+    );
+
+    if (!signedTransaction || !signedTransaction.transaction) {
+      throw new Error("Invalid signed transaction format");
+    }
+
+    const tx = signedTransaction.transaction;
+    if (!tx.signature) {
+      throw new Error("Transaction is not signed");
+    }
+
+    // Prepare the broadcast request body
+    const broadcastBody = {
+      transaction: {
+        data: tx.data,
+        encoded: tx.encoded,
+        signature: tx.signature,
+      },
+    };
+
+    let parsedBody;
+    try {
+      parsedBody = BroadcastTransactionRequestBodySchema.parse(broadcastBody);
+    } catch (err) {
+      throw new Error(
+        "Invalid broadcast transaction body. " +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+
+    const result = await makeProxyRequest(
+      `/${chainId}/transaction/broadcast`,
+      "POST",
+      JSON.stringify(parsedBody)
+    );
+
+    console.log(`[broadcastTransaction] Transaction broadcast result:`, result);
+
+    const text = JSON.stringify(result);
+    return { content: [{ type: "text", text }] };
+  },
 };
 
 // Tool definitions for OpenAI function calling (names, descriptions, schemas)
@@ -555,6 +675,46 @@ export const toolDefinitions = [
         body: EncodeTransactionRequestBodySchema,
       },
       required: ["chainId", "body"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "signTransaction",
+    description:
+      "Signs an encoded transaction using Privy's raw signing capability. Takes the output from encodeTransaction and produces a signed transaction ready for broadcast.",
+    parameters: {
+      type: "object",
+      properties: {
+        encodedTransaction: {
+          type: "object",
+          description:
+            "The encoded transaction object returned from encodeTransaction",
+        },
+      },
+      required: ["encodedTransaction"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "broadcastTransaction",
+    description:
+      "Broadcasts a signed transaction to the blockchain network. Takes the output from signTransaction and submits it to the blockchain.",
+    parameters: {
+      type: "object",
+      properties: {
+        chainId: {
+          type: "string",
+          description: "The ID of the blockchain network",
+        },
+        signedTransaction: {
+          type: "object",
+          description:
+            "The signed transaction object returned from signTransaction",
+        },
+      },
+      required: ["chainId", "signedTransaction"],
       additionalProperties: false,
     },
   },

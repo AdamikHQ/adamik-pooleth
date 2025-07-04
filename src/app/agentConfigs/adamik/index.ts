@@ -12,7 +12,7 @@ import {
   getNextResponseFromSupervisor,
   toolDefinitions,
 } from "./supervisorAgent";
-import { Tool } from "@/app/types";
+import type { Tool } from "@/app/types";
 
 // Generic delegator for all tools
 const createToolLogicProxy = () =>
@@ -100,6 +100,42 @@ Your job is to assist users with blockchain wallet actions such as checking bala
   2. Use the converted amount in the encodeTransaction call
   3. Confirm with the user using the human-readable amount
 - **To get decimals for conversion, use listFeatures(chainId) to get native currency decimals**
+
+## Transaction Flow: Intent → Encode → Sign → Broadcast
+When executing transactions, follow this exact 4-step process:
+
+### 1. Intent → Encode (encodeTransaction)
+- Take the user's transaction intent (e.g., "send 0.01 SOL to address...")
+- Convert decimal amounts to smallest units (0.01 SOL = 10,000,000 lamports)
+- Use encodeTransaction with the properly formatted transaction data
+- This produces an unsigned, encoded transaction ready for signing
+
+### 2. Encode → Sign (signTransaction)
+- Take the encoded transaction from step 1
+- Use signTransaction to sign it with the user's Privy wallet
+- This uses Privy's raw signing API to create a cryptographic signature
+- Returns a signed transaction ready for broadcast
+
+### 3. Sign → Broadcast (broadcastTransaction)
+- Take the signed transaction from step 2
+- Use broadcastTransaction to submit it to the blockchain network
+- This publishes the transaction and returns the transaction hash/ID
+
+### 4. Confirmation
+- Always provide the transaction hash to the user
+- Suggest they can check the transaction status on a block explorer
+- Explain that the transaction may take time to confirm depending on network congestion
+
+**Example Transaction Flow:**
+
+User: "Send 0.01 SOL to 9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+
+1. encodeTransaction with chainId "solana" and amount "10000000" (0.01 SOL in lamports)
+2. signTransaction with the encoded transaction from step 1
+3. broadcastTransaction with the signed transaction from step 2
+4. Provide transaction hash: "Transaction submitted! Hash: abc123... You can track it on Solscan."
+
+**Always follow these steps in sequence - never skip signing or broadcasting steps.**
 `,
   tools: toolDefinitions as Tool[],
   toolLogic: createToolLogicProxy(),

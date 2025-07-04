@@ -164,9 +164,13 @@ function App() {
   useEffect(() => {
     if (sessionStatus === "CONNECTED") {
       console.log(
-        `updatingSession, isPTTACtive=${isPTTActive} sessionStatus=${sessionStatus}`
+        `[PTT] Mode changed - isPTTActive=${isPTTActive}, sessionStatus=${sessionStatus}, updating session...`
       );
       updateSession();
+    } else {
+      console.log(
+        `[PTT] Mode changed but not connected - isPTTActive=${isPTTActive}, sessionStatus=${sessionStatus}`
+      );
     }
   }, [isPTTActive]);
 
@@ -284,6 +288,7 @@ function App() {
   };
 
   const updateSession = (shouldTriggerResponse: boolean = false) => {
+    // Clear all audio buffers when updating session
     sendClientEvent(
       { type: "input_audio_buffer.clear" },
       "clear audio buffer on session update"
@@ -318,7 +323,25 @@ function App() {
       },
     };
 
-    sendClientEvent(sessionUpdateEvent);
+    console.log(
+      `[updateSession] isPTTActive=${isPTTActive}, turnDetection=`,
+      turnDetection
+    );
+    sendClientEvent(
+      sessionUpdateEvent,
+      `session update (PTT: ${isPTTActive ? "ON" : "OFF"})`
+    );
+
+    // Additional buffer clearing for PTT mode changes to ensure clean state
+    if (isPTTActive) {
+      // When enabling PTT, ensure we clear any pending VAD state
+      setTimeout(() => {
+        sendClientEvent(
+          { type: "input_audio_buffer.clear" },
+          "clear VAD state for PTT mode"
+        );
+      }, 100);
+    }
 
     if (shouldTriggerResponse) {
       sendSimulatedUserMessage("hi");
@@ -372,15 +395,28 @@ function App() {
   };
 
   const handleTalkButtonDown = () => {
+    console.log(
+      `[PTT] Button down - sessionStatus: ${sessionStatus}, dataChannel ready: ${
+        dataChannel?.readyState === "open"
+      }, isPTTActive: ${isPTTActive}`
+    );
+
     if (sessionStatus !== "CONNECTED" || dataChannel?.readyState !== "open")
       return;
     cancelAssistantSpeech();
 
     setIsPTTUserSpeaking(true);
     sendClientEvent({ type: "input_audio_buffer.clear" }, "clear PTT buffer");
+    console.log(`[PTT] Started speaking`);
   };
 
   const handleTalkButtonUp = () => {
+    console.log(
+      `[PTT] Button up - sessionStatus: ${sessionStatus}, dataChannel ready: ${
+        dataChannel?.readyState === "open"
+      }, isPTTUserSpeaking: ${isPTTUserSpeaking}`
+    );
+
     if (
       sessionStatus !== "CONNECTED" ||
       dataChannel?.readyState !== "open" ||
@@ -391,6 +427,7 @@ function App() {
     setIsPTTUserSpeaking(false);
     sendClientEvent({ type: "input_audio_buffer.commit" }, "commit PTT");
     sendClientEvent({ type: "response.create" }, "trigger response PTT");
+    console.log(`[PTT] Stopped speaking, committed audio`);
   };
 
   const onToggleConnection = () => {
