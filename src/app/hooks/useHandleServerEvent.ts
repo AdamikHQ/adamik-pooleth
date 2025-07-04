@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
+import { usePrivy } from "@privy-io/react-auth";
 
 export interface UseHandleServerEventParams {
   setSessionStatus: (status: SessionStatus) => void;
@@ -36,6 +37,7 @@ export function useHandleServerEvent({
   } = useTranscript();
 
   const { logServerEvent } = useEvent();
+  const { user, signMessage } = usePrivy();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
 
@@ -64,7 +66,7 @@ export function useHandleServerEvent({
         fnResult
       );
 
-      // PATCH: Handle signing requests from requestUserSignature
+      // PATCH: Handle signing requests from requestUserSignature - Skip custom modal, go directly to Privy
       if (functionCallParams.name === "requestUserSignature") {
         try {
           const resultText = fnResult.content?.[0]?.text || "{}";
@@ -94,26 +96,103 @@ export function useHandleServerEvent({
             throw parseError;
           }
 
-          if (
-            result.type === "signing_request" &&
-            result.data &&
-            setSigningRequest
-          ) {
-            // Set the signing request to trigger the UI
-            setSigningRequest(result.data);
+          if (result.type === "signing_request" && result.data) {
+            console.log(
+              "[handleFunctionCall] Processing signing request directly with Privy"
+            );
 
-            // Send a response to the agent that the signing request is being processed
-            sendClientEvent({
-              type: "conversation.item.create",
-              item: {
-                type: "function_call_output",
-                call_id: functionCallParams.call_id,
-                output:
-                  "Signing request presented to user. Waiting for user to sign or cancel the transaction.",
-              },
-            });
-            sendClientEvent({ type: "response.create" });
-            return;
+            // Check if user is authenticated and signMessage is available
+            if (!user || !signMessage) {
+              const errorMessage =
+                "User not authenticated or signing not available";
+              console.error("[handleFunctionCall]", errorMessage);
+              sendClientEvent({
+                type: "conversation.item.create",
+                item: {
+                  type: "function_call_output",
+                  call_id: functionCallParams.call_id,
+                  output: `Error: ${errorMessage}`,
+                },
+              });
+              sendClientEvent({ type: "response.create" });
+              return;
+            }
+
+            try {
+              console.log("🔐 Starting direct Privy signing...");
+              console.log("Transaction to sign:", result.data);
+
+              // Prepare the hash for signing
+              let hashToSign = result.data.hashToSign;
+
+              // Ensure the hash has 0x prefix for Ethereum-like chains
+              if (!hashToSign.startsWith("0x")) {
+                hashToSign = "0x" + hashToSign;
+              }
+
+              console.log("Hash to sign:", hashToSign);
+
+              // Sign the transaction hash using Privy's signMessage directly
+              const signResult = await signMessage({ message: hashToSign });
+
+              console.log("✅ Transaction signed successfully:", signResult);
+
+              // Create a broadcast request with the signed transaction
+              const broadcastData = {
+                encodedTransaction: result.data.encodedTransaction,
+                signature: signResult.signature,
+              };
+
+              // Send the broadcast request to the voice agent
+              const broadcastMessage = `Transaction has been signed successfully! Here is the signed transaction data: ${JSON.stringify(
+                broadcastData
+              )}. Please call the broadcastTransaction function to submit this to the blockchain.`;
+
+              // Send a response to the agent that the signing is complete
+              sendClientEvent({
+                type: "conversation.item.create",
+                item: {
+                  type: "function_call_output",
+                  call_id: functionCallParams.call_id,
+                  output: `Transaction signed successfully. Signature: ${signResult.signature}`,
+                },
+              });
+
+              // Send a simulated user message to inform the agent about the successful signing
+              sendClientEvent({
+                type: "conversation.item.create",
+                item: {
+                  type: "message",
+                  role: "user",
+                  content: [
+                    {
+                      type: "input_text",
+                      text: broadcastMessage,
+                    },
+                  ],
+                },
+              });
+
+              sendClientEvent({ type: "response.create" });
+              return;
+            } catch (signingError) {
+              console.error("❌ Error signing transaction:", signingError);
+              const errorMessage =
+                signingError instanceof Error
+                  ? signingError.message
+                  : "Failed to sign transaction";
+
+              sendClientEvent({
+                type: "conversation.item.create",
+                item: {
+                  type: "function_call_output",
+                  call_id: functionCallParams.call_id,
+                  output: `Error signing transaction: ${errorMessage}`,
+                },
+              });
+              sendClientEvent({ type: "response.create" });
+              return;
+            }
           }
         } catch (error) {
           console.error("Error handling signing request:", error);
