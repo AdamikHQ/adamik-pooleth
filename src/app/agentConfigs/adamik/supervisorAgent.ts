@@ -23,6 +23,48 @@ import {
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
 
+// Helper function to map chain IDs to their base chain types
+const getChainTypeFromChainId = (chainId: string): string => {
+  // Map specific chain IDs to their base wallet types supported by Privy
+  const chainMapping: Record<string, string> = {
+    // Solana chains
+    solana: "solana",
+    "solana-devnet": "solana",
+    "solana-testnet": "solana",
+
+    // Ethereum and EVM chains
+    ethereum: "ethereum",
+    "ethereum-goerli": "ethereum",
+    "ethereum-sepolia": "ethereum",
+    polygon: "ethereum",
+    "polygon-mumbai": "ethereum",
+    arbitrum: "ethereum",
+    "arbitrum-goerli": "ethereum",
+    optimism: "ethereum",
+    "optimism-goerli": "ethereum",
+    base: "ethereum",
+    "base-goerli": "ethereum",
+    avalanche: "ethereum",
+    "avalanche-fuji": "ethereum",
+    bsc: "ethereum",
+    "bsc-testnet": "ethereum",
+
+    // Tron chains
+    tron: "tron",
+    "tron-shasta": "tron",
+
+    // Cosmos chains
+    cosmos: "cosmos",
+    "cosmos-testnet": "cosmos",
+
+    // Stellar chains
+    stellar: "stellar",
+    "stellar-testnet": "stellar",
+  };
+
+  return chainMapping[chainId] || "ethereum"; // Default to ethereum for unknown chains
+};
+
 // Tool logic implementations for all supported tools
 const toolLogic: Record<string, any> = {
   // Returns a list of supported chain IDs
@@ -316,13 +358,18 @@ const toolLogic: Record<string, any> = {
       _userContext
     ) {
       try {
+        // Get the chain-specific wallet address for this transaction
+        const chainType = getChainTypeFromChainId(chainId);
         const addressResult = await makeWalletRequest(
           "getAddress",
-          {},
+          { chainType }, // Pass the chain type to get the right wallet
           _userContext
         );
         if (addressResult && addressResult.address) {
           candidate.senderAddress = addressResult.address;
+          console.log(
+            `[encodeTransaction] Auto-populated senderAddress for ${chainId}: ${addressResult.address}`
+          );
         }
       } catch (error) {
         console.warn(
