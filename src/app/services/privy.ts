@@ -148,12 +148,7 @@ class PrivyService {
 
       const walletData = await this.client.walletApi.createWallet({
         owner: { userId: userId },
-        chainType: chainType as
-          | "ethereum"
-          | "cosmos"
-          | "stellar"
-          | "tron"
-          | "solana",
+        chainType: chainType as "ethereum" | "cosmos" | "tron" | "solana",
       });
 
       console.log("✅ Wallet created successfully:", walletData);

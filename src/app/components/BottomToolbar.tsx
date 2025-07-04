@@ -63,7 +63,7 @@ function BottomToolbar({
     <footer className="bg-white border-t border-gray-200 px-6 py-4 max-md:px-4 max-md:py-3">
       <div className="flex items-center justify-between max-w-7xl mx-auto max-lg:flex-col max-lg:space-y-4 max-lg:items-stretch">
         {/* Connection Control */}
-        <div className="flex items-center max-lg:justify-center">
+        <div className="flex items-center space-x-4 max-lg:justify-center">
           <button
             onClick={onToggleConnection}
             className={getConnectionButtonClasses()}

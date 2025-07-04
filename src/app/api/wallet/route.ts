@@ -151,18 +151,19 @@ export async function POST(req: Request) {
         const baseChainType = getBaseChainType(newChainType);
 
         try {
-          const newWallet = await privyService.createWallet(
+          const { wallet, alreadyExisted } = await privyService.createWallet(
             userId,
             baseChainType
           );
           return NextResponse.json({
             success: true,
             wallet: {
-              id: newWallet.id,
-              address: newWallet.address,
-              chainType: newWallet.chainType,
+              id: wallet.id,
+              address: wallet.address,
+              chainType: wallet.chainType,
               walletClientType: "privy",
             },
+            alreadyExisted,
             requestedChain: newChainType,
             baseChainType: baseChainType,
           });

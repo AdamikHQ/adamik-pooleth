@@ -76,6 +76,13 @@ function App() {
     (wallet) => wallet.walletClientType === "privy"
   );
 
+  // Auto-connect to Voice Agent upon Privy authentication
+  useEffect(() => {
+    if (authenticated && userWallet && sessionStatus === "DISCONNECTED") {
+      connectToRealtime();
+    }
+  }, [authenticated, userWallet, sessionStatus]);
+
   const sendClientEvent = (eventObj: any, eventNameSuffix = "") => {
     if (dcRef.current && dcRef.current.readyState === "open") {
       logClientEvent(eventObj, eventNameSuffix);
@@ -124,18 +131,6 @@ function App() {
     setSelectedAgentName(agentKeyToUse);
     setSelectedAgentConfigSet(agents);
   }, [searchParams]);
-
-  useEffect(() => {
-    // Only connect to realtime if user is authenticated and has a wallet
-    if (
-      selectedAgentName &&
-      sessionStatus === "DISCONNECTED" &&
-      authenticated &&
-      userWallet
-    ) {
-      connectToRealtime();
-    }
-  }, [selectedAgentName, authenticated, userWallet]);
 
   useEffect(() => {
     // Only update session if user is authenticated and has a wallet
@@ -236,6 +231,8 @@ function App() {
   };
 
   const disconnectFromRealtime = () => {
+    console.log("Disconnecting from realtime...");
+
     if (pcRef.current) {
       pcRef.current.getSenders().forEach((sender) => {
         if (sender.track) {
@@ -251,6 +248,11 @@ function App() {
     setIsPTTUserSpeaking(false);
 
     logClientEvent({}, "disconnected");
+
+    console.log(
+      "Disconnected. Wake word detection will restart via useEffect."
+    );
+    // Wake word detection will restart automatically via useEffect when sessionStatus becomes "DISCONNECTED"
   };
 
   const sendSimulatedUserMessage = (text: string) => {
@@ -419,6 +421,9 @@ function App() {
     const storedPushToTalkUI = localStorage.getItem("pushToTalkUI");
     if (storedPushToTalkUI) {
       setIsPTTActive(storedPushToTalkUI === "true");
+    } else {
+      // Default to push-to-talk enabled
+      setIsPTTActive(true);
     }
     const storedLogsExpanded = localStorage.getItem("logsExpanded");
     if (storedLogsExpanded) {
@@ -557,93 +562,52 @@ function App() {
   return (
     <div className="text-base flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-800 relative">
       {/* Modern Header */}
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4 flex justify-between items-center max-md:px-4 max-sm:flex-col max-sm:space-y-4 max-sm:items-stretch">
-          {/* Logo Section */}
-          <div
-            className="flex items-center cursor-pointer hover:opacity-80 transition-opacity max-sm:justify-center"
-            onClick={() => window.location.reload()}
-          >
+      <header className="bg-white border-b border-gray-200 px-6 py-4 max-md:px-4">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center space-x-4">
             <Image
               src="/Adamik_logo_flat_blue.svg"
-              alt="Adamik Agent"
-              width={140}
-              height={29}
+              alt="Adamik Logo"
+              width={120}
+              height={40}
               className="h-8 w-auto"
             />
+            <h1 className="text-xl font-bold text-gray-900 max-sm:hidden">
+              Voice Agent
+            </h1>
           </div>
 
-          {/* Controls Section */}
-          <div className="flex items-center space-x-6 max-lg:space-x-4 max-md:space-x-3 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-3">
-            {/* Scenario and Agent Selection */}
-            <div className="flex items-center space-x-6 max-lg:space-x-4 max-md:space-x-3 max-sm:flex-col max-sm:space-x-0 max-sm:space-y-3">
-              {/* Scenario Selection */}
-              <div className="flex items-center space-x-3 max-sm:w-full">
-                <label className="text-sm font-medium text-gray-700 max-sm:w-20 max-sm:flex-shrink-0">
-                  Scenario
-                </label>
-                <div className="relative max-sm:flex-1">
-                  <select
-                    value={agentSetKey}
-                    onChange={handleAgentChange}
-                    className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:w-full"
+          <div className="flex items-center space-x-4 max-sm:space-x-2">
+            <div className="flex items-center space-x-3 max-sm:space-x-2">
+              <label className="text-sm font-medium text-gray-700 max-sm:hidden">
+                Agent
+              </label>
+              <div className="relative">
+                <select
+                  className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:min-w-[100px] max-sm:px-3 max-sm:py-1 max-sm:text-xs"
+                  value={agentSetKey}
+                  onChange={handleAgentChange}
+                >
+                  {Object.keys(allAgentSets).map((agentKey) => (
+                    <option key={agentKey} value={agentKey}>
+                      {agentKey}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
+                  <svg
+                    className="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
                   >
-                    {Object.keys(allAgentSets).map((agentKey) => (
-                      <option key={agentKey} value={agentKey}>
-                        {agentKey}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </div>
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
                 </div>
               </div>
-
-              {/* Agent Selection */}
-              {agentSetKey && (
-                <div className="flex items-center space-x-3 max-sm:w-full">
-                  <label className="text-sm font-medium text-gray-700 max-sm:w-20 max-sm:flex-shrink-0">
-                    Agent
-                  </label>
-                  <div className="relative max-sm:flex-1">
-                    <select
-                      value={selectedAgentName}
-                      onChange={handleSelectedAgentChange}
-                      className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-gray-700 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors cursor-pointer min-w-[120px] max-sm:w-full"
-                    >
-                      {selectedAgentConfigSet?.map((agent) => (
-                        <option key={agent.name} value={agent.name}>
-                          {agent.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400">
-                      <svg
-                        className="h-4 w-4"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M5.23 7.21a.75.75 0 011.06.02L10 10.44l3.71-3.21a.75.75 0 111.04 1.08l-4.25 3.65a.75.75 0 01-1.04 0L5.21 8.27a.75.75 0 01.02-1.06z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* User Information */}

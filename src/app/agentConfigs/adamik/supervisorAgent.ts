@@ -125,43 +125,115 @@ const toolLogic: Record<string, any> = {
     chainId,
     accountId,
   }: GetAccountStatePathParams) => {
+    console.log(
+      `[getAccountState] Starting request for chainId: ${chainId}, accountId: ${accountId}`
+    );
+
     // 1. Fetch the account state
     const state = await makeProxyRequest(
       `/${chainId}/account/${accountId}/state`
     );
 
+    console.log(
+      `[getAccountState] Raw state response:`,
+      JSON.stringify(state, null, 2)
+    );
+
     // 2. Verify/format native balance decimals
     if (state?.balances?.native && state.balances.native.available != null) {
+      console.log(
+        `[getAccountState] Processing native balance - raw available: ${state.balances.native.available}`
+      );
+
       // Fetch chain features to get native decimals
       const features = await makeProxyRequest(`/chains/${chainId}`);
-      const decimals = features?.nativeCurrency?.decimals;
+      console.log(
+        `[getAccountState] Chain features for ${chainId}:`,
+        JSON.stringify(features, null, 2)
+      );
+
+      const decimals = features?.chain?.decimals;
+      console.log(`[getAccountState] Native currency decimals: ${decimals}`);
+
       if (typeof decimals === "number") {
-        state.balances.native.formattedAvailable = (
-          Number(state.balances.native.available) / Math.pow(10, decimals)
-        ).toString();
+        const rawValue = Number(state.balances.native.available);
+        const divisor = Math.pow(10, decimals);
+        const formattedValue = rawValue / divisor;
+
+        console.log(
+          `[getAccountState] Decimal calculation - raw: ${rawValue}, divisor: ${divisor}, formatted: ${formattedValue}`
+        );
+
+        state.balances.native.formattedAvailable = formattedValue.toString();
         state.balances.native.decimals = decimals;
+
+        console.log(
+          `[getAccountState] Native balance formatted - formattedAvailable: ${state.balances.native.formattedAvailable}`
+        );
+      } else {
+        console.log(
+          `[getAccountState] WARNING: Invalid decimals for native currency: ${decimals}`
+        );
       }
+    } else {
+      console.log(
+        `[getAccountState] No native balance found or available is null`
+      );
     }
 
     // 3. Verify/format token balances decimals
     if (state?.balances?.tokens && Array.isArray(state.balances.tokens)) {
+      console.log(
+        `[getAccountState] Processing ${state.balances.tokens.length} token balances`
+      );
+
       for (const token of state.balances.tokens) {
         if (token.tokenId && token.amount != null) {
+          console.log(
+            `[getAccountState] Processing token ${token.tokenId} - raw amount: ${token.amount}`
+          );
+
           // Fetch token details (including decimals)
           const tokenDetails = await makeProxyRequest(
             `/${chainId}/token/${token.tokenId}`
           );
+          console.log(
+            `[getAccountState] Token details for ${token.tokenId}:`,
+            JSON.stringify(tokenDetails, null, 2)
+          );
+
           if (tokenDetails?.decimals != null) {
-            token.formattedAmount = (
-              Number(token.amount) / Math.pow(10, tokenDetails.decimals)
-            ).toString();
+            const rawValue = Number(token.amount);
+            const divisor = Math.pow(10, tokenDetails.decimals);
+            const formattedValue = rawValue / divisor;
+
+            console.log(
+              `[getAccountState] Token decimal calculation - raw: ${rawValue}, divisor: ${divisor}, formatted: ${formattedValue}`
+            );
+
+            token.formattedAmount = formattedValue.toString();
             token.decimals = tokenDetails.decimals;
+
+            console.log(
+              `[getAccountState] Token balance formatted - formattedAmount: ${token.formattedAmount}`
+            );
+          } else {
+            console.log(
+              `[getAccountState] WARNING: Invalid decimals for token ${token.tokenId}: ${tokenDetails?.decimals}`
+            );
           }
         }
       }
+    } else {
+      console.log(`[getAccountState] No token balances found`);
     }
 
     // 4. Return the verified/formatted state
+    console.log(
+      `[getAccountState] Final formatted state:`,
+      JSON.stringify(state, null, 2)
+    );
+
     const text = JSON.stringify(state);
     return { content: [{ type: "text", text }] };
   },
@@ -435,19 +507,41 @@ export const getNextResponseFromSupervisor = {
   async execute(input: { toolName: string; params: any }, _details: any) {
     const { toolName, params } = input;
     const userContext = _details?.userContext;
+
+    console.log(
+      `[Supervisor] Executing tool: ${toolName} with params:`,
+      JSON.stringify(params, null, 2)
+    );
+    console.log(
+      `[Supervisor] User context:`,
+      JSON.stringify(userContext, null, 2)
+    );
+
     if (!toolName || !(toolName in toolLogic)) {
+      console.log(
+        `[Supervisor] ERROR: Unknown tool or missing toolName: ${toolName}`
+      );
       return {
         content: [{ type: "text", text: "Unknown tool or missing toolName." }],
       };
     }
     try {
-      return await toolLogic[toolName](params, userContext);
+      const result = await toolLogic[toolName](params, userContext);
+      console.log(
+        `[Supervisor] Tool ${toolName} result:`,
+        JSON.stringify(result, null, 2)
+      );
+      return result;
     } catch (e) {
+      const errorMessage = `Error: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      console.log(`[Supervisor] ERROR in tool ${toolName}:`, errorMessage);
       return {
         content: [
           {
             type: "text",
-            text: `Error: ${e instanceof Error ? e.message : String(e)}`,
+            text: errorMessage,
           },
         ],
       };
