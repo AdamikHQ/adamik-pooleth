@@ -13,6 +13,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import Transcript from "./components/Transcript";
 import Events from "./components/Events";
 import BottomToolbar from "./components/BottomToolbar";
+import { TransactionSigner } from "./components/TransactionSigner";
 
 // Types
 import { AgentConfig, SessionStatus } from "@/app/types";
@@ -68,9 +69,51 @@ function App() {
     useState<boolean>(false);
   const [manualDisconnect, setManualDisconnect] = useState(false);
 
+  // Transaction signing state
+  const [signingRequest, setSigningRequest] = useState<any>(null);
+
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
     useAudioDownload();
+
+  // Transaction signing handlers
+  const handleSignatureComplete = async (signature: string) => {
+    if (!signingRequest) return;
+
+    console.log("🔐 Transaction signed, broadcasting...", signature);
+
+    try {
+      // Create a broadcast request with the signed transaction
+      const broadcastData = {
+        encodedTransaction: signingRequest.encodedTransaction,
+        signature: signature,
+      };
+
+      // Send the broadcast request to the voice agent
+      const broadcastMessage = `Transaction has been signed successfully! Here is the signed transaction data: ${JSON.stringify(
+        broadcastData
+      )}. Please call the broadcastTransaction function to submit this to the blockchain.`;
+
+      // Send a simulated user message to inform the agent about the successful signing
+      sendSimulatedUserMessage(broadcastMessage);
+
+      // Clear the signing request
+      setSigningRequest(null);
+    } catch (error) {
+      console.error("Error handling signature completion:", error);
+      setSigningRequest(null);
+    }
+  };
+
+  const handleSignatureCancel = () => {
+    console.log("🔐 Transaction signing cancelled");
+
+    // Send a message to the voice agent about cancellation
+    sendSimulatedUserMessage("Transaction signing was cancelled by the user.");
+
+    // Clear the signing request
+    setSigningRequest(null);
+  };
 
   // Get user's embedded wallet
   const userWallet = wallets.find(
@@ -119,6 +162,7 @@ function App() {
             walletAddress: userWallet.address,
           }
         : undefined,
+    setSigningRequest,
   });
 
   useEffect(() => {
@@ -448,12 +492,12 @@ function App() {
     window.location.replace(url.toString());
   };
 
-  const handleSelectedAgentChange = (
-    e: React.ChangeEvent<HTMLSelectElement>
-  ) => {
-    const newAgentName = e.target.value;
-    setSelectedAgentName(newAgentName);
-  };
+  // const handleSelectedAgentChange = (
+  //   e: React.ChangeEvent<HTMLSelectElement>
+  // ) => {
+  //   const newAgentName = e.target.value;
+  //   setSelectedAgentName(newAgentName);
+  // };
 
   // Instead of using setCodec, we update the URL and refresh the page when codec changes
   const handleCodecChange = (newCodec: string) => {
@@ -709,6 +753,13 @@ function App() {
         setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
         codec={urlCodec}
         onCodecChange={handleCodecChange}
+      />
+
+      {/* Transaction Signing Modal */}
+      <TransactionSigner
+        signingRequest={signingRequest}
+        onSignatureComplete={handleSignatureComplete}
+        onSignatureCancel={handleSignatureCancel}
       />
     </div>
   );

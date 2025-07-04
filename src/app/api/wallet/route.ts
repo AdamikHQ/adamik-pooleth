@@ -104,6 +104,13 @@ export async function POST(req: Request) {
           );
         }
 
+        console.log(
+          `[rawSign] Received parameters - userId: ${userId}, walletAddress: ${walletAddress}, chainType: "${chainType}", hash: ${hash?.substring(
+            0,
+            20
+          )}...`
+        );
+
         const walletForSigning = await privyService.getWallet(userId, {
           walletAddress,
           chainType,
@@ -179,17 +186,6 @@ export async function POST(req: Request) {
             { status: 500 }
           );
         }
-
-      case "signTransaction":
-        // Legacy action - redirect to use rawSign instead
-        return NextResponse.json(
-          {
-            error: "Use 'rawSign' action for transaction signing",
-            message:
-              "Provide the transaction hash in the 'hash' field for raw signing",
-          },
-          { status: 400 }
-        );
 
       default:
         return NextResponse.json(

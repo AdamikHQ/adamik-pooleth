@@ -5,19 +5,15 @@
 
 import { chains } from "./chains";
 import {
+  GetAccountStatePathParams,
   GetAccountHistoryPathParams,
   GetAccountHistoryQueryParams,
-  GetAccountStatePathParams,
   GetChainValidatorsPathParams,
   GetChainValidatorsQueryParams,
   GetTransactionDetailsPathParams,
   PubkeyToAddressPathParams,
   PubkeyToAddressRequestBody,
-  EncodeTransactionPathParams,
-  EncodeTransactionRequestBody,
   EncodeTransactionRequestBodySchema,
-  EncodeTransactionResponse,
-  BroadcastTransactionPathParams,
   BroadcastTransactionRequestBodySchema,
 } from "./schemas";
 import { makeProxyRequest } from "@/app/services/adamik";
@@ -63,6 +59,79 @@ const getChainTypeFromChainId = (chainId: string): string => {
   };
 
   return chainMapping[chainId] || "ethereum"; // Default to ethereum for unknown chains
+};
+
+// Helper function to validate transaction body and provide helpful error messages
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const validateTransactionBody = (body: any, chainId: string): string[] => {
+  const errors: string[] = [];
+
+  // Check for required mode field
+  if (!body.mode) {
+    errors.push(
+      "MISSING REQUIRED FIELD 'mode': Must be one of: 'transfer', 'transferToken', 'stake', 'unstake', 'claimRewards', 'withdraw', 'registerStake', 'convertAsset', 'deployAccount'"
+    );
+  } else {
+    const validModes = [
+      "transfer",
+      "transferToken",
+      "stake",
+      "unstake",
+      "claimRewards",
+      "withdraw",
+      "registerStake",
+      "convertAsset",
+      "deployAccount",
+    ];
+    if (!validModes.includes(body.mode)) {
+      errors.push(
+        `INVALID MODE '${body.mode}': Must be one of: ${validModes.join(", ")}`
+      );
+    }
+  }
+
+  // Mode-specific validation
+  if (body.mode === "transfer" || body.mode === "transferToken") {
+    if (!body.recipientAddress) {
+      errors.push(
+        `MISSING REQUIRED FIELD 'recipientAddress': ${body.mode} transactions require a recipient address`
+      );
+    }
+
+    if (!body.amount && !body.useMaxAmount) {
+      errors.push(
+        `MISSING AMOUNT: ${body.mode} transactions require either 'amount' (as string in smallest units) or 'useMaxAmount: true'`
+      );
+    }
+
+    if (body.amount && typeof body.amount !== "string") {
+      errors.push(
+        `INVALID AMOUNT TYPE: 'amount' must be a string (e.g., "10000000"), not ${typeof body.amount}`
+      );
+    }
+
+    if (body.mode === "transferToken" && !body.tokenId) {
+      errors.push(
+        "MISSING REQUIRED FIELD 'tokenId': transferToken transactions require a token contract address"
+      );
+    }
+  }
+
+  if (body.mode === "stake" || body.mode === "unstake") {
+    if (!body.targetValidatorAddress && !body.validatorAddress) {
+      errors.push(
+        `MISSING VALIDATOR: ${body.mode} transactions require 'targetValidatorAddress' (stake) or 'validatorAddress' (unstake)`
+      );
+    }
+
+    if (!body.amount && !body.useMaxAmount) {
+      errors.push(
+        `MISSING AMOUNT: ${body.mode} transactions require either 'amount' (as string) or 'useMaxAmount: true'`
+      );
+    }
+  }
+
+  return errors;
 };
 
 // Tool logic implementations for all supported tools
@@ -137,7 +206,6 @@ const toolLogic: Record<string, any> = {
       if (chain === "solana") return "solana";
       if (chain === "tron") return "tron";
       if (chain === "cosmos") return "cosmos";
-      if (chain === "stellar") return "stellar";
       return "ethereum";
     };
     const baseChainType = getBaseChainType(chainType);
@@ -351,6 +419,27 @@ const toolLogic: Record<string, any> = {
       delete candidate.to;
     }
 
+    // Ensure amount is always a string (schema requirement)
+    if (
+      candidate.amount !== undefined &&
+      typeof candidate.amount === "number"
+    ) {
+      candidate.amount = candidate.amount.toString();
+      console.log(
+        `[encodeTransaction] Converted amount from number to string: ${candidate.amount}`
+      );
+    }
+
+    // Validate the transaction body early and provide helpful error messages
+    const validationErrors = validateTransactionBody(candidate, chainId);
+    if (validationErrors.length > 0) {
+      const errorMessage = `Transaction validation failed:\n\n${validationErrors.join(
+        "\n"
+      )}\n\nPlease fix these issues and try again.`;
+      console.log(`[encodeTransaction] Validation failed:`, validationErrors);
+      throw new Error(errorMessage);
+    }
+
     // If senderAddress is missing for transfer transactions, get it from user's wallet
     if (
       (candidate.mode === "transfer" || candidate.mode === "transferToken") &&
@@ -402,39 +491,147 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(result);
     return { content: [{ type: "text", text }] };
   },
-  // Signs an encoded transaction using Privy's raw signing
-  signTransaction: async (
-    { encodedTransaction }: { encodedTransaction: any },
+  // Requests user to sign a transaction on the client-side
+  requestUserSignature: async (
+    params: any,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     userContext?: { userId: string; walletAddress?: string }
   ) => {
-    console.log(`[signTransaction] Starting signature process for transaction`);
     console.log(
-      `[signTransaction] Input:`,
-      JSON.stringify(encodedTransaction, null, 2)
+      `[requestUserSignature] Preparing transaction for user signing`
+    );
+    console.log(
+      `[requestUserSignature] Raw params:`,
+      JSON.stringify(params, null, 2)
     );
 
-    // Handle case where encodedTransaction might be a JSON string
-    let txData = encodedTransaction;
-    if (typeof encodedTransaction === "string") {
-      try {
-        txData = JSON.parse(encodedTransaction);
-      } catch (err) {
-        throw new Error("Invalid JSON string for encoded transaction");
-      }
-    }
-
-    // The encoded transaction should have the full response from encodeTransaction
-    if (!txData || !txData.transaction) {
+    // Check if this is the common mistake where only description is provided
+    if (
+      params.description &&
+      !params.encodedTransaction &&
+      Object.keys(params).length === 1
+    ) {
       throw new Error(
-        "Invalid encoded transaction format - missing transaction object"
+        `MISSING ENCODED TRANSACTION: You called requestUserSignature with only a description. You must pass the COMPLETE result from encodeTransaction as the 'encodedTransaction' parameter.
+
+CORRECT USAGE:
+1. First call encodeTransaction to get the encoded transaction
+2. Then call requestUserSignature with BOTH parameters:
+   - encodedTransaction: <the complete result from encodeTransaction>
+   - description: "${params.description}"
+
+EXAMPLE:
+After encodeTransaction returns a result, call:
+requestUserSignature({
+  encodedTransaction: <the complete encodeTransaction result>,
+  description: "${params.description}"
+})`
       );
     }
 
-    const tx = txData.transaction;
+    // Handle different parameter formats from the AI
+    let txData;
+    const description = params.description || "Sign this transaction";
+
+    // More flexible parameter handling
+    if (params.encodedTransaction) {
+      // Format 1: { encodedTransaction: { chainId, transaction, status }, description }
+      txData = params.encodedTransaction;
+    } else if (params.chainId && params.transaction) {
+      // Format 2: { chainId, transaction, status } (unwrapped)
+      txData = params;
+    } else if (params.chainId && params.data) {
+      // Format 3: { chainId, data, ... } (alternative format)
+      txData = params;
+    } else if (typeof params === "object" && Object.keys(params).length > 0) {
+      // Format 4: Try to use the params directly if it looks like transaction data
+      console.log(
+        `[requestUserSignature] Attempting to use params as transaction data`
+      );
+      txData = params;
+    } else if (typeof params === "string") {
+      // Format 5: JSON string
+      try {
+        txData = JSON.parse(params);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (err) {
+        throw new Error("Invalid JSON string for encoded transaction");
+      }
+    } else {
+      throw new Error(
+        `Invalid parameter format. You must provide both 'encodedTransaction' and 'description' parameters.
+
+RECEIVED: ${JSON.stringify(params)}
+
+REQUIRED FORMAT:
+{
+  encodedTransaction: <complete result from encodeTransaction>,
+  description: "Human readable description"
+}
+
+EXAMPLE:
+{
+  encodedTransaction: {
+    chainId: "solana",
+    transaction: { data: {...}, encoded: [...] },
+    status: { errors: [], warnings: [] }
+  },
+  description: "Send 0.01 SOL to address"
+}`
+      );
+    }
+
+    console.log(
+      `[requestUserSignature] Processed txData:`,
+      JSON.stringify(txData, null, 2)
+    );
+
+    // Validate the transaction data structure
+    if (!txData) {
+      throw new Error("No transaction data provided");
+    }
+
+    // Handle different transaction data structures
+    let tx;
+    let chainId;
+
+    if (txData.transaction) {
+      // Standard format: { chainId, transaction: { data, encoded }, status }
+      tx = txData.transaction;
+      chainId = txData.chainId;
+    } else if (txData.data || txData.encoded) {
+      // Direct format: { chainId, data, encoded }
+      tx = txData;
+      chainId = txData.chainId;
+    } else {
+      throw new Error(
+        `Invalid transaction format. Expected transaction object with 'data' and 'encoded' fields. 
+
+RECEIVED KEYS: ${JSON.stringify(Object.keys(txData))}
+
+EXPECTED STRUCTURE:
+{
+  chainId: "solana",
+  transaction: {
+    data: { mode: "transfer", ... },
+    encoded: [{ raw: { value: "..." } }]
+  },
+  status: { errors: [], warnings: [] }
+}`
+      );
+    }
+
+    if (!chainId) {
+      throw new Error("Missing chainId in transaction data");
+    }
 
     // Find the hash to sign from the encoded items
     if (!tx.encoded || !Array.isArray(tx.encoded)) {
-      throw new Error("No encoded items found in transaction");
+      throw new Error(
+        `No encoded items found in transaction. Available fields: ${Object.keys(
+          tx
+        )}`
+      );
     }
 
     let hashToSign: string | null = null;
@@ -458,7 +655,7 @@ const toolLogic: Record<string, any> = {
 
     if (!hashToSign) {
       console.error(
-        `[signTransaction] No hash found. Available structure:`,
+        `[requestUserSignature] No hash found. Available structure:`,
         JSON.stringify(tx.encoded, null, 2)
       );
       throw new Error(
@@ -466,68 +663,72 @@ const toolLogic: Record<string, any> = {
       );
     }
 
-    // For Solana, we need to sign the raw transaction bytes, not hash them
-    console.log(
-      `[signTransaction] Data to sign: ${hashToSign.substring(0, 100)}...`
-    );
-
     // Get the user's wallet for this chain
-    const walletResult = await makeWalletRequest(
-      "getWalletForAdamik",
-      {},
-      userContext
-    );
-
-    if (!walletResult || !walletResult.walletId) {
-      throw new Error("No wallet found for signing");
-    }
-
-    console.log(`[signTransaction] Using wallet: ${walletResult.walletId}`);
-
-    // For Solana, we need to create a hash of the transaction data before signing
-    // The raw value from Adamik is the serialized transaction that needs to be hashed
-    let hashForSigning = hashToSign;
-
-    // If this is raw transaction data (like Solana BORSH), we need to hash it
-    // For now, we'll assume Privy handles this internally
-    if (!hashForSigning.startsWith("0x")) {
-      hashForSigning = "0x" + hashForSigning;
-    }
-
-    // Sign the hash using Privy
-    const signResult = await makeWalletRequest(
-      "rawSign",
-      { hash: hashForSigning },
-      userContext
-    );
-
-    if (!signResult || !signResult.signature) {
-      throw new Error("Failed to create signature");
-    }
+    const chainType = getChainTypeFromChainId(chainId);
 
     console.log(
-      `[signTransaction] Signature created successfully: ${signResult.signature}`
+      `[requestUserSignature] Chain ID: ${chainId}, Chain Type: ${chainType}`
     );
 
-    // Return the signed transaction data ready for broadcast
-    const signedTransaction = {
-      ...txData,
-      transaction: {
-        ...tx,
-        signature: signResult.signature,
-      },
+    // Prepare transaction for client-side signing
+    const signingRequest = {
+      chainId,
+      chainType,
+      description,
+      encodedTransaction: txData,
+      hashToSign,
+      status: "pending_signature",
     };
 
-    const text = JSON.stringify(signedTransaction);
+    console.log(
+      `[requestUserSignature] Transaction prepared for client-side signing`
+    );
+
+    // Return a special response that the frontend will recognize as a signing request
+    const response = {
+      type: "signing_request",
+      data: signingRequest,
+      message: `Transaction ready for signing. ${description}`,
+    };
+
+    const text = JSON.stringify(response);
     return { content: [{ type: "text", text }] };
   },
   // Broadcasts a signed transaction to the blockchain
-  broadcastTransaction: async (
-    { chainId, signedTransaction }: { chainId: string; signedTransaction: any },
-    _userContext?: any
-  ) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  broadcastTransaction: async (params: any, userContext?: any) => {
     console.log(
-      `[broadcastTransaction] Broadcasting transaction to ${chainId}`
+      `[broadcastTransaction] Broadcasting transaction`,
+      JSON.stringify(params, null, 2)
+    );
+
+    // Handle different parameter formats
+    let broadcastChainId: string;
+    let signedTransaction: any;
+
+    if (params.chainId && params.signedTransaction) {
+      // Format 1: { chainId, signedTransaction }
+      broadcastChainId = params.chainId;
+      signedTransaction = params.signedTransaction;
+    } else if (params.encodedTransaction && params.signature) {
+      // Format 2: { encodedTransaction, signature } (from client-side signing)
+      const encodedTx = params.encodedTransaction;
+      broadcastChainId = encodedTx.chainId;
+      signedTransaction = {
+        ...encodedTx,
+        transaction: {
+          ...encodedTx.transaction,
+          signature: params.signature,
+        },
+      };
+    } else {
+      throw new Error(
+        "Invalid parameters. Expected either { chainId, signedTransaction } or { encodedTransaction, signature }"
+      );
+    }
+
+    console.log(
+      `[broadcastTransaction] Broadcasting to ${broadcastChainId} with signature`
     );
 
     if (!signedTransaction || !signedTransaction.transaction) {
@@ -559,7 +760,7 @@ const toolLogic: Record<string, any> = {
     }
 
     const result = await makeProxyRequest(
-      `/${chainId}/transaction/broadcast`,
+      `/${broadcastChainId}/transaction/broadcast`,
       "POST",
       JSON.stringify(parsedBody)
     );
@@ -646,14 +847,14 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "createWallet",
     description:
-      "Create a new embedded wallet for a specific blockchain network. Supports creating wallets for different chain types like ethereum, solana, tron, cosmos, and stellar.",
+      "Create a new embedded wallet for a specific blockchain network. Supports creating wallets for different chain types like ethereum, solana, tron, and cosmos.",
     parameters: {
       type: "object",
       properties: {
         chainType: {
           type: "string",
           description:
-            "The blockchain type to create a wallet for (e.g., 'ethereum', 'solana', 'tron', 'cosmos', 'stellar'). Must be one of the supported chains.",
+            "The blockchain type to create a wallet for (e.g., 'ethereum', 'solana', 'tron', 'cosmos'). Must be one of the supported chains.",
           enum: chains,
         },
       },
@@ -759,8 +960,48 @@ export const toolDefinitions = [
   {
     type: "function" as const,
     name: "encodeTransaction",
-    description:
-      "Turns a transaction intent in Adamik JSON format into an encoded transaction for the given chain (ready to sign). Supports all transaction types: transfer, transferToken, stake, unstake, claimRewards, withdraw, registerStake, convertAsset, and deployAccount.",
+    description: `
+Encodes a transaction for blockchain submission. Returns an encoded transaction ready for signing.
+
+REQUIRED FIELDS:
+- mode: MANDATORY discriminator field. Must be one of: "transfer", "transferToken", "stake", "unstake", "claimRewards", "withdraw", "registerStake", "convertAsset", "deployAccount"
+- senderAddress: Sender's wallet address (auto-populated if missing for transfer/transferToken)
+- amount: Amount in smallest units as STRING (e.g., "10000000" for 0.01 SOL) OR useMaxAmount: true
+
+EXAMPLES:
+
+SOL Transfer:
+{
+  "chainId": "solana",
+  "body": {
+    "mode": "transfer",
+    "recipientAddress": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+    "amount": "10000000"
+  }
+}
+
+Token Transfer:
+{
+  "chainId": "ethereum", 
+  "body": {
+    "mode": "transferToken",
+    "tokenId": "0xA0b86a33E6e87C6e81962e0c50c5B4e4b4c6c4f8",
+    "recipientAddress": "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
+    "amount": "1000000000000000000"
+  }
+}
+
+Staking:
+{
+  "chainId": "cosmos",
+  "body": {
+    "mode": "stake", 
+    "targetValidatorAddress": "cosmosvaloper1...",
+    "amount": "1000000"
+  }
+}
+
+CRITICAL: Always include the "mode" field - it's required for schema validation!`,
     parameters: {
       type: "object",
       properties: {
@@ -776,9 +1017,9 @@ export const toolDefinitions = [
   },
   {
     type: "function" as const,
-    name: "signTransaction",
+    name: "requestUserSignature",
     description:
-      "Signs an encoded transaction using Privy's raw signing capability. Takes the COMPLETE output from encodeTransaction (the entire JSON object including chainId, transaction, and status) and produces a signed transaction ready for broadcast. IMPORTANT: Pass the full encodeTransaction result, not just parts of it.",
+      "Requests the user to sign an encoded transaction using their wallet. Takes the COMPLETE output from encodeTransaction and prepares it for client-side signing. The user will be prompted to review and sign the transaction in their wallet interface.",
     parameters: {
       type: "object",
       properties: {
@@ -787,8 +1028,13 @@ export const toolDefinitions = [
           description:
             "The COMPLETE encoded transaction object returned from encodeTransaction - pass the entire JSON result including chainId, transaction.data, transaction.encoded, and status fields",
         },
+        description: {
+          type: "string",
+          description:
+            "A human-readable description of what this transaction will do (e.g., 'Send 0.1 SOL to Alice', 'Stake 5 SOL with validator XYZ'). This will be shown to the user when they are asked to sign.",
+        },
       },
-      required: ["encodedTransaction"],
+      required: ["encodedTransaction", "description"],
       additionalProperties: false,
     },
   },
@@ -796,21 +1042,31 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "broadcastTransaction",
     description:
-      "Broadcasts a signed transaction to the blockchain network. Takes the output from signTransaction and submits it to the blockchain.",
+      "Broadcasts a signed transaction to the blockchain network. Can accept either the traditional format with chainId and signedTransaction, or the client-side format with encodedTransaction and signature.",
     parameters: {
       type: "object",
       properties: {
         chainId: {
           type: "string",
-          description: "The ID of the blockchain network",
+          description:
+            "The ID of the blockchain network (optional if encodedTransaction contains chainId)",
         },
         signedTransaction: {
           type: "object",
           description:
-            "The signed transaction object returned from signTransaction",
+            "The signed transaction object (for server-side signed transactions)",
+        },
+        encodedTransaction: {
+          type: "object",
+          description:
+            "The encoded transaction object (for client-side signed transactions)",
+        },
+        signature: {
+          type: "string",
+          description:
+            "The signature from client-side signing (for client-side signed transactions)",
         },
       },
-      required: ["chainId", "signedTransaction"],
       additionalProperties: false,
     },
   },

@@ -1,0 +1,162 @@
+
+> realtime-examples@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.3.3
+   - Local:        http://localhost:3000
+   - Network:      http://172.31.52.173:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 1445ms
+ ○ Compiling /api/wallet ...
+ ✓ Compiled /api/wallet in 1139ms (1340 modules)
+🔍 Wallet API Debug: {
+  action: 'rawSign',
+  userId: 'did:privy:cmcnvwtdj00o7l20mlzwvr5qd',
+  walletAddress: undefined,
+  chainType: 'ethereum'
+}
+[rawSign] Received parameters - userId: did:privy:cmcnvwtdj00o7l20mlzwvr5qd, walletAddress: undefined, chainType: "ethereum", hash: 0x1234567890abcdef12...
+🔍 Fetching user from Privy...
+✅ User fetched: { id: 'did:privy:cmcnvwtdj00o7l20mlzwvr5qd', linkedAccounts: 6 }
+🔍 Looking for embedded wallets...
+🔍 Wallet data structure: {
+  "id": null,
+  "address": "0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE",
+  "type": "wallet",
+  "verifiedAt": "2025-07-03T21:15:21.000Z",
+  "firstVerifiedAt": "2025-07-03T21:15:21.000Z",
+  "latestVerifiedAt": "2025-07-03T21:15:21.000Z",
+  "chainType": "ethereum",
+  "chainId": "eip155:1",
+  "walletClientType": "privy",
+  "connectorType": "embedded",
+  "hdWalletIndex": 0,
+  "imported": false,
+  "delegated": false
+}
+🔍 Wallet data structure: {
+  "id": "waxy7kmuk424febk05sym3p2",
+  "address": "2MzhBMh6RPJbEcbayCFu8C7VCzghUZBgMmZzYTRBmnbY",
+  "type": "wallet",
+  "verifiedAt": "2025-07-03T21:16:42.000Z",
+  "firstVerifiedAt": "2025-07-03T21:16:42.000Z",
+  "latestVerifiedAt": "2025-07-03T21:16:42.000Z",
+  "chainType": "solana",
+  "chainId": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+  "walletClientType": "privy",
+  "connectorType": "embedded",
+  "hdWalletIndex": 0,
+  "imported": false,
+  "delegated": false
+}
+🔍 Wallet data structure: {
+  "id": "t9ev0auqdzz4uzaldrnbex3e",
+  "address": "cosmos1yupxkadqv2rw5j6lt4rc5dx04v8y5yujhphnep",
+  "type": "wallet",
+  "verifiedAt": "2025-07-03T21:16:44.000Z",
+  "firstVerifiedAt": "2025-07-03T21:16:44.000Z",
+  "latestVerifiedAt": "2025-07-03T21:16:44.000Z",
+  "chainType": "cosmos",
+  "chainId": "",
+  "walletClientType": "privy",
+  "connectorType": "embedded",
+  "hdWalletIndex": 0,
+  "imported": false,
+  "delegated": false
+}
+🔍 Wallet data structure: {
+  "id": "jpyvvqkkv280zvy0brru7de4",
+  "address": "0xFa2A1a3611A35A18a8a892424b13515274Ed1c16",
+  "type": "wallet",
+  "verifiedAt": "2025-07-04T12:44:29.000Z",
+  "firstVerifiedAt": "2025-07-04T12:44:29.000Z",
+  "latestVerifiedAt": "2025-07-04T12:44:29.000Z",
+  "chainType": "ethereum",
+  "chainId": "eip155:1",
+  "walletClientType": "privy",
+  "connectorType": "embedded",
+  "hdWalletIndex": 0,
+  "imported": false,
+  "delegated": false
+}
+🔍 Wallet data structure: {
+  "id": "jm1ei9e4a2kni6ofq8q7vrfi",
+  "address": "cosmos1cnpc6k0js68fp3v0v8c3sa7cf47dn8flh4l53x",
+  "type": "wallet",
+  "verifiedAt": "2025-07-04T12:45:02.000Z",
+  "firstVerifiedAt": "2025-07-04T12:45:02.000Z",
+  "latestVerifiedAt": "2025-07-04T12:45:02.000Z",
+  "chainType": "cosmos",
+  "chainId": "",
+  "walletClientType": "privy",
+  "connectorType": "embedded",
+  "hdWalletIndex": 0,
+  "imported": false,
+  "delegated": false
+}
+🔍 Found embedded wallets: {
+  count: 5,
+  wallets: [
+    {
+      chainType: 'ethereum',
+      address: '0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE'
+    },
+    {
+      chainType: 'solana',
+      address: '2MzhBMh6RPJbEcbayCFu8C7VCzghUZBgMmZzYTRBmnbY'
+    },
+    {
+      chainType: 'cosmos',
+      address: 'cosmos1yupxkadqv2rw5j6lt4rc5dx04v8y5yujhphnep'
+    },
+    {
+      chainType: 'ethereum',
+      address: '0xFa2A1a3611A35A18a8a892424b13515274Ed1c16'
+    },
+    {
+      chainType: 'cosmos',
+      address: 'cosmos1cnpc6k0js68fp3v0v8c3sa7cf47dn8flh4l53x'
+    }
+  ]
+}
+🔍 Looking for ethereum wallet: ✅ Found
+🔍 Found 2 ethereum wallets, selected: {
+  id: 'jpyvvqkkv280zvy0brru7de4',
+  address: '0xFa2A1a3611A35A18a8a892424b13515274Ed1c16',
+  hasProperID: true
+}
+🔍 Raw signing hash 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef with wallet jpyvvqkkv280zvy0brru7de4...
+🔍 Full wallet ID for debugging: "jpyvvqkkv280zvy0brru7de4"
+🔍 Wallet ID length: 24
+🔍 Auth header: Basic Y2x2aTUyZmlsMD...
+🔍 Request URL: https://api.privy.io/v1/wallets/jpyvvqkkv280zvy0brru7de4/raw_sign
+🔍 Request body: {"params":{"hash":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}}
+🔍 Using authorization key: wallet-auth:MIGHAgEA...
+❌ HTTP 401 error details:
+❌ Error response body: {"error":"No valid user session keys available"}
+❌ Error creating raw signature: Error: HTTP error! status: 401
+    at PrivyService.rawSign (src/app/services/privy.ts:290:14)
+    at async POST (src/app/api/wallet/route.ts:127:28)
+  288 |           console.log(`❌ Could not read error response body`);
+  289 |         }
+> 290 |         throw new Error(`HTTP error! status: ${response.status}`);
+      |              ^
+  291 |       }
+  292 |
+  293 |       const result = await response.json();
+Error creating raw signature: Error: Failed to create raw signature
+    at PrivyService.rawSign (src/app/services/privy.ts:298:12)
+    at async POST (src/app/api/wallet/route.ts:127:28)
+  296 |     } catch (error) {
+  297 |       console.error("❌ Error creating raw signature:", error);
+> 298 |       throw new Error("Failed to create raw signature");
+      |            ^
+  299 |     }
+  300 |   }
+  301 |
+ POST /api/wallet 500 in 1970ms
+   Reload env: .env
+ ✓ Compiled in 76ms (277 modules)
+[?25h
