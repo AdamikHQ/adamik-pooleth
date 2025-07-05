@@ -112,76 +112,18 @@ export default function App() {
 
   // Set up the global trigger function for the voice agent
   useEffect(() => {
-    (window as any).__triggerLedgerModal = async () => {
+    (window as any).__triggerLedgerModal = () => {
       console.log("🔐 Voice agent triggered Ledger modal");
       console.log(
         "🔗 Checking for __ledgerConnectionPromise:",
         !!(window as any).__ledgerConnectionPromise
       );
 
-      try {
-        console.log("🚀 Starting Ledger flow...");
-        // Access the current startLedgerFlow function directly to avoid stale closure
-        const result = await startLedgerFlow();
-        console.log("✅ Ledger flow completed with result:", result);
-
-        // Resolve the promise waiting in the voice agent
-        if ((window as any).__ledgerConnectionPromise) {
-          console.log(
-            `🎯 Found __ledgerConnectionPromise with ID: ${
-              (window as any).__ledgerConnectionPromise.id
-            }`
-          );
-          console.log("📤 Resolving voice agent promise with result:", result);
-          (window as any).__ledgerConnectionPromise.resolve(result);
-          console.log("✅ Voice agent promise resolved successfully");
-
-          // Clean up the timeout and promise after successful resolution
-          const timeoutId = (window as any).__ledgerConnectionPromise.timeoutId;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            console.log(
-              `⏰ Cleared timeout ${timeoutId} for successful promise resolution`
-            );
-          }
-          delete (window as any).__ledgerConnectionPromise;
-          console.log(
-            "🧹 Cleaned up __ledgerConnectionPromise after resolution"
-          );
-        } else {
-          console.error("❌ No __ledgerConnectionPromise found to resolve!");
-        }
-      } catch (error: any) {
-        console.error("❌ Ledger flow failed:", error);
-        // Reject the promise waiting in the voice agent
-        if ((window as any).__ledgerConnectionPromise) {
-          console.log(
-            `🎯 Found __ledgerConnectionPromise with ID: ${
-              (window as any).__ledgerConnectionPromise.id
-            }`
-          );
-          console.log(
-            "📤 Rejecting voice agent promise with error:",
-            error.message
-          );
-          (window as any).__ledgerConnectionPromise.reject(error);
-
-          // Clean up the timeout and promise after rejection
-          const timeoutId = (window as any).__ledgerConnectionPromise.timeoutId;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            console.log(
-              `⏰ Cleared timeout ${timeoutId} for failed promise resolution`
-            );
-          }
-          delete (window as any).__ledgerConnectionPromise;
-          console.log(
-            "🧹 Cleaned up __ledgerConnectionPromise after rejection"
-          );
-        } else {
-          console.error("❌ No __ledgerConnectionPromise found to reject!");
-        }
-      }
+      // Simply open the modal - it will handle the promise resolution
+      console.log("🚀 Opening Ledger modal...");
+      startLedgerFlow().catch((error) => {
+        console.error("❌ Failed to start Ledger flow:", error);
+      });
     };
 
     // Cleanup on unmount (but don't clean up the promise here as it might be in use)

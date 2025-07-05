@@ -67,14 +67,23 @@ class LedgerService {
       throw new Error("Device Management Kit not initialized");
     }
 
-    this.ethSigner = new SignerEthBuilder({
-      dmk: this.dmk,
-      sessionId,
-      originToken: "live-agent-dev", // required by Ledger SDK
-    }).build();
+    console.log("🔧 Creating Ethereum signer for session:", sessionId);
 
-    this.currentSessionId = sessionId;
-    console.log("✅ Ethereum signer initialized for session:", sessionId);
+    try {
+      this.ethSigner = new SignerEthBuilder({
+        dmk: this.dmk,
+        sessionId,
+        originToken: "live-agent-dev", // required by Ledger SDK
+      }).build();
+
+      this.currentSessionId = sessionId;
+      console.log("✅ Ethereum signer initialized for session:", sessionId);
+    } catch (error: any) {
+      console.error("❌ Failed to initialize Ethereum signer:", error);
+      throw new Error(
+        `Failed to initialize Ethereum signer: ${error.message || error}`
+      );
+    }
   }
 
   /**
@@ -148,35 +157,72 @@ class LedgerService {
 
     try {
       // Find the discovered device first
-      let discoveredDevice: DiscoveredDevice | null = null;
+      console.log("📡 Getting available devices for connection...");
 
       const devices = await new Promise<DiscoveredDevice[]>(
         (resolve, reject) => {
           let subscription: any = null;
+          let timeoutId: NodeJS.Timeout | null = null;
+          let isResolved = false;
+
+          const cleanup = () => {
+            if (subscription) subscription.unsubscribe();
+            if (timeoutId) clearTimeout(timeoutId);
+            isResolved = true;
+          };
+
           const observer = {
             next: (devices: DiscoveredDevice[]) => {
-              if (subscription) subscription.unsubscribe();
-              resolve(devices);
+              if (!isResolved) {
+                console.log(`📱 Found ${devices.length} available devices`);
+                cleanup();
+                resolve(devices);
+              }
             },
             error: (error: any) => {
-              if (subscription) subscription.unsubscribe();
-              reject(error);
+              if (!isResolved) {
+                console.error("❌ Error getting devices:", error);
+                cleanup();
+                reject(error);
+              }
             },
           };
+
           subscription = this.dmk!.listenToAvailableDevices({}).subscribe(
             observer
           );
+
+          // Timeout for getting devices
+          timeoutId = setTimeout(() => {
+            if (!isResolved) {
+              console.error("⏰ Timeout getting available devices");
+              cleanup();
+              reject(new Error("Timeout getting available devices"));
+            }
+          }, 10000);
         }
       );
 
-      discoveredDevice = devices.find((d) => d.id === deviceId) || null;
+      const discoveredDevice = devices.find((d) => d.id === deviceId);
 
       if (!discoveredDevice) {
-        throw new Error(`Device ${deviceId} not found`);
+        console.error(
+          `❌ Device ${deviceId} not found in available devices:`,
+          devices.map((d) => d.id)
+        );
+        throw new Error(`Device ${deviceId} not found in available devices`);
       }
 
+      console.log(
+        `📱 Found target device: ${discoveredDevice.deviceModel.name}`
+      );
+
       // Connect using Device Management Kit
+      console.log("🔗 Establishing connection...");
       const sessionId = await this.dmk.connect({ device: discoveredDevice });
+
+      console.log(`✅ Session established: ${sessionId}`);
+
       const connectedDevice = this.dmk.getConnectedDevice({ sessionId });
 
       const device: LedgerDevice = {
@@ -189,12 +235,16 @@ class LedgerService {
       };
 
       this.connectedDevices.set(deviceId, device);
-      console.log(`✅ Connected to device: ${device.name}`);
+      console.log(
+        `✅ Connected to device: ${device.name} (Session: ${sessionId})`
+      );
 
       return device;
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Device connection failed:", error);
-      throw new Error("Failed to connect to Ledger device");
+      throw new Error(
+        `Failed to connect to Ledger device: ${error.message || error}`
+      );
     }
   }
 
@@ -207,10 +257,11 @@ class LedgerService {
   ): Promise<void> {
     const device = this.connectedDevices.get(deviceId);
     if (!device || !device.sessionId || !this.dmk) {
-      throw new Error("Device not connected");
+      throw new Error(`Device not connected: ${deviceId}`);
     }
 
     console.log(`📱 Opening Ethereum app on device: ${device.name}`);
+    console.log(`⏰ Timeout: ${timeoutMs}ms`);
 
     try {
       const deviceAction = new OpenAppDeviceAction({
@@ -221,18 +272,25 @@ class LedgerService {
         },
       });
 
+      console.log("🚀 Executing open app action...");
+
       await this.dmk.executeDeviceAction({
         sessionId: device.sessionId,
         deviceAction,
       });
 
+      console.log("✅ Ethereum app opened successfully");
+
       // Initialize Ethereum signer after app is open
+      console.log("🔧 Initializing Ethereum signer...");
       this.initializeEthereumSigner(device.sessionId);
 
-      console.log("✅ Ethereum app opened successfully");
-    } catch (error) {
+      console.log("✅ Ethereum signer initialized");
+    } catch (error: any) {
       console.error("❌ Failed to open Ethereum app:", error);
-      throw new Error("Failed to open Ethereum app on device");
+      throw new Error(
+        `Failed to open Ethereum app on device: ${error.message || error}`
+      );
     }
   }
 
@@ -246,20 +304,25 @@ class LedgerService {
   ): Promise<LedgerAddress> {
     const device = this.connectedDevices.get(deviceId);
     if (!device || !device.sessionId) {
-      throw new Error("Device not connected");
+      throw new Error(`Device not connected: ${deviceId}`);
     }
+
+    console.log(`📍 Getting Ethereum address from device: ${device.name}`);
+    console.log(`🛣️ Using derivation path: ${derivationPath}`);
+    console.log(`🔍 Verification required: ${verify}`);
 
     // Ensure Ethereum signer is initialized for this session
     if (!this.ethSigner || this.currentSessionId !== device.sessionId) {
+      console.log(
+        "🔧 Initializing Ethereum signer for session:",
+        device.sessionId
+      );
       this.initializeEthereumSigner(device.sessionId);
     }
 
     if (!this.ethSigner) {
       throw new Error("Ethereum signer not initialized");
     }
-
-    console.log(`📍 Getting Ethereum address from device: ${device.name}`);
-    console.log(`🛣️ Using derivation path: ${derivationPath}`);
 
     if (verify) {
       console.log(
@@ -268,6 +331,8 @@ class LedgerService {
     }
 
     try {
+      console.log("🚀 Calling ethSigner.getAddress()...");
+
       // Use the Ethereum signer to get the address
       const result = this.ethSigner.getAddress(derivationPath, {
         checkOnDevice: verify,
@@ -275,44 +340,101 @@ class LedgerService {
         skipOpenApp: true, // App should already be open
       });
 
+      console.log("📡 Observable created, waiting for results...");
+
       // Wait for the completed state by subscribing to the observable
       return new Promise((resolve, reject) => {
+        let timeoutId: NodeJS.Timeout | null = null;
+        let isResolved = false;
+
+        const cleanup = () => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          isResolved = true;
+        };
+
+        // Set timeout for address retrieval
+        timeoutId = setTimeout(() => {
+          if (!isResolved) {
+            cleanup();
+            console.error("⏰ Address retrieval timeout");
+            reject(
+              new Error(
+                "Address retrieval timeout - please ensure device is responsive"
+              )
+            );
+          }
+        }, 60000); // 60 second timeout
+
         const subscription = result.observable.subscribe({
           next: (state) => {
-            console.log("Ledger getAddress state:", state);
+            console.log("📊 Ledger getAddress state:", state.status, state);
 
-            if (state.status === DeviceActionStatus.Completed) {
+            if (state.status === DeviceActionStatus.Completed && !isResolved) {
+              cleanup();
               const output = state.output;
-              console.log("Ledger getAddress completed with output:", output);
+              console.log(
+                "✅ Ledger getAddress completed with output:",
+                output
+              );
 
               subscription.unsubscribe();
+
+              if (!output.address) {
+                reject(new Error("No address returned from device"));
+                return;
+              }
+
               resolve({
-                address: output.address || "",
+                address: output.address,
                 publicKey: output.publicKey || "",
                 derivationPath,
                 chainCode: output.chainCode || "",
               });
-            } else if (state.status === DeviceActionStatus.Error) {
-              console.error("Ledger getAddress error:", state.error);
+            } else if (
+              state.status === DeviceActionStatus.Error &&
+              !isResolved
+            ) {
+              cleanup();
+              console.error("❌ Ledger getAddress error:", state.error);
               subscription.unsubscribe();
-              reject(new Error(`Device action failed: ${state.error}`));
+              reject(
+                new Error(
+                  `Device action failed: ${state.error || "Unknown error"}`
+                )
+              );
             }
             // For Pending states, we just log and continue waiting
           },
           error: (error) => {
-            console.error("Ledger getAddress observable error:", error);
-            subscription.unsubscribe();
-            reject(error);
+            if (!isResolved) {
+              cleanup();
+              console.error("❌ Ledger getAddress observable error:", error);
+              subscription.unsubscribe();
+              reject(new Error(`Observable error: ${error.message || error}`));
+            }
           },
           complete: () => {
-            console.log("Ledger getAddress observable completed");
-            subscription.unsubscribe();
+            if (!isResolved) {
+              cleanup();
+              console.log(
+                "🏁 Ledger getAddress observable completed without result"
+              );
+              subscription.unsubscribe();
+              reject(
+                new Error("Observable completed without returning address")
+              );
+            }
           },
         });
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Failed to get Ethereum address:", error);
-      throw new Error("Failed to retrieve Ethereum address from Ledger device");
+      throw new Error(
+        `Failed to retrieve Ethereum address: ${error.message || error}`
+      );
     }
   }
 
@@ -372,6 +494,24 @@ class LedgerService {
    */
   isWebHIDSupported(): boolean {
     return typeof navigator !== "undefined" && "hid" in navigator;
+  }
+
+  /**
+   * Get current service state for debugging
+   */
+  getServiceState(): any {
+    return {
+      isInitialized: this.isInitialized,
+      hasDMK: !!this.dmk,
+      hasEthSigner: !!this.ethSigner,
+      currentSessionId: this.currentSessionId,
+      connectedDevicesCount: this.connectedDevices.size,
+      connectedDevices: Array.from(this.connectedDevices.values()).map((d) => ({
+        id: d.id,
+        name: d.name,
+        hasSessionId: !!d.sessionId,
+      })),
+    };
   }
 }
 

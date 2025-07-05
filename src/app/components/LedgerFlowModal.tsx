@@ -125,7 +125,22 @@ export function LedgerFlowModal({
 
   const updateStep = (stepId: string, status: LedgerStep["status"]) => {
     setSteps((prev) =>
-      prev.map((step) => (step.id === stepId ? { ...step, status } : step))
+      prev.map((step) => {
+        if (step.id === stepId) {
+          return { ...step, status };
+        }
+        // If this step is failing, reset all subsequent steps to pending
+        if (status === "error") {
+          const stepIndex = INITIAL_STEPS.findIndex((s) => s.id === stepId);
+          const currentStepIndex = INITIAL_STEPS.findIndex(
+            (s) => s.id === step.id
+          );
+          if (currentStepIndex > stepIndex) {
+            return { ...step, status: "pending" };
+          }
+        }
+        return step;
+      })
     );
 
     if (status === "in-progress") {
@@ -134,11 +149,14 @@ export function LedgerFlowModal({
       setCurrentStep("");
       setIsProcessing(false);
       setShowRetryOptions(true);
+      flowActiveRef.current = false; // Stop the flow
     }
   };
 
   const handleSuccess = (addressInfo: any, device: any) => {
     console.log("✅ Ledger connection successful!");
+    console.log("📍 Address info:", addressInfo);
+    console.log("📱 Device info:", device);
 
     updateStep("get-address", "completed");
 
@@ -151,13 +169,34 @@ export function LedgerFlowModal({
       deviceName: device.name,
     };
 
+    console.log("🎯 Connection result:", connectionResult);
     setResult(connectionResult);
     setIsProcessing(false);
+    flowActiveRef.current = false;
 
     // Send to global promise handler
     if ((window as any).__ledgerConnectionPromise) {
+      console.log("🔗 Resolving promise for agent...");
+
+      // Clear timeout if it exists (from supervisor agent)
+      if ((window as any).__ledgerConnectionPromise.timeoutId) {
+        clearTimeout((window as any).__ledgerConnectionPromise.timeoutId);
+        console.log("⏰ Cleared supervisor agent timeout");
+      }
+
       (window as any).__ledgerConnectionPromise.resolve(connectionResult);
       delete (window as any).__ledgerConnectionPromise;
+      console.log("✅ Promise resolved and cleaned up");
+    } else {
+      console.warn("⚠️ No promise found - agent might not receive result!");
+    }
+
+    // Also resolve hook promise if it exists
+    if ((window as any).__ledgerHookPromise) {
+      console.log("🔗 Resolving hook promise...");
+      (window as any).__ledgerHookPromise.resolve(connectionResult);
+      delete (window as any).__ledgerHookPromise;
+      console.log("✅ Hook promise resolved and cleaned up");
     }
 
     // Send to callback
@@ -173,6 +212,7 @@ export function LedgerFlowModal({
 
   const handleError = (error: string, stepId?: string) => {
     console.error("❌ Ledger flow error:", error);
+    console.error("🔍 Failed step:", stepId);
 
     if (stepId) {
       updateStep(stepId, "error");
@@ -185,8 +225,27 @@ export function LedgerFlowModal({
 
     // Send to global promise handler
     if ((window as any).__ledgerConnectionPromise) {
+      console.log("🔗 Rejecting promise for agent...");
+
+      // Clear timeout if it exists (from supervisor agent)
+      if ((window as any).__ledgerConnectionPromise.timeoutId) {
+        clearTimeout((window as any).__ledgerConnectionPromise.timeoutId);
+        console.log("⏰ Cleared supervisor agent timeout");
+      }
+
       (window as any).__ledgerConnectionPromise.reject(new Error(error));
       delete (window as any).__ledgerConnectionPromise;
+      console.log("❌ Promise rejected and cleaned up");
+    } else {
+      console.warn("⚠️ No promise found - agent might not receive error!");
+    }
+
+    // Also reject hook promise if it exists
+    if ((window as any).__ledgerHookPromise) {
+      console.log("🔗 Rejecting hook promise...");
+      (window as any).__ledgerHookPromise.reject(new Error(error));
+      delete (window as any).__ledgerHookPromise;
+      console.log("❌ Hook promise rejected and cleaned up");
     }
 
     // Send to callback
@@ -241,6 +300,9 @@ export function LedgerFlowModal({
       // Step 4: Get address
       updateStep("get-address", "in-progress");
       console.log("📍 Getting Ethereum address...");
+
+      // Debug: Print service state
+      console.log("🔍 Ledger service state:", ledgerService.getServiceState());
 
       const addressInfo = await ledgerService.getEthereumAddress(
         device.id!,
@@ -385,7 +447,8 @@ export function LedgerFlowModal({
           </div>
           <div className="flex justify-between text-sm text-gray-500 mt-2">
             <span>
-              Step {completedSteps + (isProcessing ? 1 : 0)} of {steps.length}
+              Step {Math.max(1, completedSteps + (isProcessing ? 1 : 0))} of{" "}
+              {steps.length}
             </span>
             <span className="font-medium">
               {isCompleted ? "Complete" : hasError ? "Error" : "Connecting..."}
@@ -498,24 +561,61 @@ export function useLedgerFlow() {
   const startFlow = (): Promise<LedgerConnectionResult> => {
     console.log("🎬 Starting Ledger flow via hook");
 
-    return new Promise((resolve, reject) => {
-      // Store promise resolvers globally for the modal to access
-      (window as any).__ledgerConnectionPromise = { resolve, reject };
-
-      // Open modal
+    // Check if supervisor agent already created a promise
+    if ((window as any).__ledgerConnectionPromise) {
+      console.log("🔗 Found existing supervisor agent promise, using it");
+      // Just open the modal, the existing promise will be resolved by the modal
       setIsModalOpen(true);
       setResult(null);
-    });
+      console.log("📂 Modal opened for supervisor agent flow");
+
+      // Return a promise that will be resolved when the modal completes
+      // This is for the hook caller, but the real result goes to supervisor agent
+      return new Promise((resolve, reject) => {
+        // Store hook resolvers separately so we can notify both
+        (window as any).__ledgerHookPromise = { resolve, reject };
+      });
+    } else {
+      console.log("🔗 Creating new promise for hook-based flow");
+
+      return new Promise((resolve, reject) => {
+        // Store promise resolvers globally for the modal to access
+        // Compatible with supervisor agent's promise structure
+        (window as any).__ledgerConnectionPromise = {
+          resolve,
+          reject,
+          id: "hook-" + Math.random().toString(36).substr(2, 9),
+        };
+        console.log("🔗 Promise handlers stored globally");
+
+        // Open modal
+        setIsModalOpen(true);
+        setResult(null);
+        console.log("📂 Modal opened, waiting for user interaction");
+      });
+    }
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     // Clean up any pending promises
     if ((window as any).__ledgerConnectionPromise) {
+      // Clear timeout if it exists (from supervisor agent)
+      if ((window as any).__ledgerConnectionPromise.timeoutId) {
+        clearTimeout((window as any).__ledgerConnectionPromise.timeoutId);
+        console.log("⏰ Cleared supervisor agent timeout on close");
+      }
+
       (window as any).__ledgerConnectionPromise.reject(
         new Error("Modal closed")
       );
       delete (window as any).__ledgerConnectionPromise;
+    }
+
+    // Also clean up hook promise if it exists
+    if ((window as any).__ledgerHookPromise) {
+      (window as any).__ledgerHookPromise.reject(new Error("Modal closed"));
+      delete (window as any).__ledgerHookPromise;
     }
   };
 
