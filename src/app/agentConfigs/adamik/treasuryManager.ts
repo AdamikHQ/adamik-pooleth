@@ -58,7 +58,17 @@ const treasuryStrategies: Record<string, any> = {
           { userContext }
         );
 
+        console.log(
+          `📊 Balance result for ${network}:`,
+          JSON.stringify(balanceResult, null, 2)
+        );
+
         const balance = JSON.parse(balanceResult.content[0].text);
+        console.log(
+          `💰 Parsed balance for ${network}:`,
+          JSON.stringify(balance, null, 2)
+        );
+
         portfolioData.push({
           network,
           balance,
@@ -66,6 +76,11 @@ const treasuryStrategies: Record<string, any> = {
           tokens: balance?.balances?.tokens || [],
         });
       }
+
+      console.log(
+        `📋 Complete portfolio data:`,
+        JSON.stringify(portfolioData, null, 2)
+      );
 
       // 2. Analyze security needs
       const securityAnalysis = await treasuryStrategies.analyzeSecurityNeeds(
@@ -110,8 +125,18 @@ const treasuryStrategies: Record<string, any> = {
   analyzeSecurityNeeds: async (portfolioData: any[]) => {
     const recommendations = [];
 
+    console.log(
+      `🔒 Analyzing security needs for ${portfolioData.length} networks...`
+    );
+
     for (const portfolio of portfolioData) {
       const { network, tokens } = portfolio;
+
+      console.log(`🔍 Security analysis for ${network}:`, {
+        tokensCount: tokens.length,
+        hasNative: !!portfolio.native,
+        nativeBalance: portfolio.native?.formattedAvailable,
+      });
 
       // Check USDC balances
       const usdcToken = tokens.find(
@@ -120,8 +145,24 @@ const treasuryStrategies: Record<string, any> = {
           t.token?.symbol?.toLowerCase() === "usdc"
       );
 
+      console.log(
+        `💰 USDC token found for ${network}:`,
+        usdcToken
+          ? {
+              ticker: usdcToken.token?.ticker,
+              symbol: usdcToken.token?.symbol,
+              formattedAmount: usdcToken.formattedAmount,
+              amount: usdcToken.amount,
+            }
+          : "No USDC token found"
+      );
+
       if (usdcToken && usdcToken.formattedAmount) {
         const usdcAmount = parseFloat(usdcToken.formattedAmount);
+
+        console.log(
+          `📊 USDC amount for ${network}: ${usdcAmount} (threshold: ${TREASURY_RULES.SECURITY_THRESHOLD})`
+        );
 
         if (usdcAmount > TREASURY_RULES.SECURITY_THRESHOLD) {
           recommendations.push({
@@ -141,9 +182,25 @@ const treasuryStrategies: Record<string, any> = {
 
       // Check ETH balances
       const nativeBalance = portfolio.native;
+      console.log(
+        `⚡ Native balance for ${network}:`,
+        nativeBalance
+          ? {
+              formattedAvailable: nativeBalance.formattedAvailable,
+              available: nativeBalance.available,
+            }
+          : "No native balance found"
+      );
+
       if (nativeBalance?.formattedAvailable) {
         const ethAmount = parseFloat(nativeBalance.formattedAvailable);
         const ethValueUSD = ethAmount * MOCK_ETH_PRICE_USD;
+
+        console.log(
+          `📊 ETH amount for ${network}: ${ethAmount} ETH (~$${ethValueUSD.toFixed(
+            2
+          )}) (threshold: $${TREASURY_RULES.SECURITY_THRESHOLD})`
+        );
 
         if (ethValueUSD > TREASURY_RULES.SECURITY_THRESHOLD) {
           recommendations.push({
@@ -165,6 +222,10 @@ const treasuryStrategies: Record<string, any> = {
       }
     }
 
+    console.log(
+      `✅ Security analysis complete: ${recommendations.length} recommendations`
+    );
+
     return {
       type: "security_analysis",
       recommendations,
@@ -176,6 +237,10 @@ const treasuryStrategies: Record<string, any> = {
   analyzeYieldOpportunities: async (portfolioData: any[]) => {
     const recommendations = [];
 
+    console.log(
+      `📈 Analyzing yield opportunities for ${portfolioData.length} networks...`
+    );
+
     // Get USDC yield rates on Aave for all chains
     const yieldRates: Record<string, any> = {};
     const chains = SUPPORTED_YIELD_CHAINS;
@@ -183,6 +248,8 @@ const treasuryStrategies: Record<string, any> = {
     for (const chain of chains) {
       yieldRates[chain] = await MarketDataService.getYieldRates(chain);
     }
+
+    console.log(`💹 Yield rates loaded:`, yieldRates);
 
     // Find best USDC yield on Aave across all chains
     let bestYield = { chain: "", protocol: "aave", rate: 0, token: "usdc" };
@@ -194,18 +261,33 @@ const treasuryStrategies: Record<string, any> = {
       }
     }
 
+    console.log(`🏆 Best yield found:`, bestYield);
+
     // Analyze each portfolio position (only USDC)
     for (const portfolio of portfolioData) {
       const { network, tokens } = portfolio;
+
+      console.log(`🔍 Yield analysis for ${network}: ${tokens.length} tokens`);
 
       for (const token of tokens) {
         const tokenSymbol =
           token.token?.ticker?.toLowerCase() ||
           token.token?.symbol?.toLowerCase();
 
+        console.log(`💰 Token analysis:`, {
+          network,
+          symbol: tokenSymbol,
+          formattedAmount: token.formattedAmount,
+          amount: token.amount,
+        });
+
         // Only analyze USDC positions
         if (tokenSymbol === "usdc") {
           const currentAmount = parseFloat(token.formattedAmount || "0");
+
+          console.log(
+            `📊 USDC found: ${currentAmount} (threshold: ${TREASURY_RULES.SECURITY_THRESHOLD})`
+          );
 
           // Only recommend yield farming for amounts below security threshold
           if (
@@ -215,6 +297,13 @@ const treasuryStrategies: Record<string, any> = {
             const currentYield = yieldRates[network]?.aave?.usdc || 0;
             const bestAvailableYield = bestYield.rate;
             const yieldImprovement = bestAvailableYield - currentYield;
+
+            console.log(`💹 Yield comparison for ${network}:`, {
+              currentYield,
+              bestAvailableYield,
+              yieldImprovement,
+              minImprovement: TREASURY_RULES.MIN_YIELD_IMPROVEMENT,
+            });
 
             if (yieldImprovement > TREASURY_RULES.MIN_YIELD_IMPROVEMENT) {
               recommendations.push({
@@ -239,6 +328,10 @@ const treasuryStrategies: Record<string, any> = {
         }
       }
     }
+
+    console.log(
+      `✅ Yield analysis complete: ${recommendations.length} recommendations`
+    );
 
     return {
       type: "yield_analysis",
@@ -417,6 +510,10 @@ export const getNextResponseFromTreasuryManager = {
     const { toolName, params } = input;
     const userContext = _details?.userContext;
 
+    console.log(`🏦 Treasury Manager executing: ${toolName}`);
+    console.log(`👤 User context available:`, !!userContext);
+    console.log(`📝 Params:`, params);
+
     if (!toolName || !(toolName in treasuryStrategies)) {
       return {
         content: [
@@ -427,8 +524,10 @@ export const getNextResponseFromTreasuryManager = {
 
     try {
       const result = await treasuryStrategies[toolName](params, userContext);
+      console.log(`✅ Treasury Manager result:`, result);
       return result;
     } catch (error) {
+      console.error(`❌ Treasury Manager error:`, error);
       const errorMessage = `Treasury Error: ${
         error instanceof Error ? error.message : String(error)
       }`;
