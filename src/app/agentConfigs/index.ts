@@ -1,8 +1,8 @@
 import { AllAgentConfigsType } from "@/app/types";
-import adamik from "./adamik";
+import pooleth from "./adamik";
 
 export const allAgentSets: AllAgentConfigsType = {
-  adamik,
+  pooleth,
 };
 
-export const defaultAgentSetKey = "adamik";
+export const defaultAgentSetKey = "pooleth";

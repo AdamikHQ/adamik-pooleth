@@ -683,6 +683,9 @@ export class CCTPService {
     const usdcBalanceWei = ethers.parseUnits(params.usdcBalance, decimals);
 
     console.log("🔍 CCTP Debug - usdcBalanceWei:", usdcBalanceWei);
+    console.log("🔍 CCTP Debug - totalRequired:", totalRequired);
+    console.log("🔍 CCTP Debug - amountInWei:", amountInWei);
+    console.log("🔍 CCTP Debug - maxFee:", maxFee);
 
     if (usdcBalanceWei < totalRequired) {
       const totalRequiredFormatted = ethers.formatUnits(
@@ -730,7 +733,24 @@ export class CCTPService {
       );
 
       tx = txResult;
-      receipt = txResult; // Privy sendTransaction returns the receipt-like object
+
+      // For Privy, we need to get the actual transaction receipt to access logs
+      // The txResult from Privy doesn't have the logs we need
+      const provider = signer.provider;
+      if (provider && txResult.hash) {
+        // Wait for the transaction to be mined and get the full receipt
+        try {
+          receipt = await provider.waitForTransaction(txResult.hash);
+        } catch (error) {
+          console.warn(
+            "Failed to get transaction receipt from provider, using txResult:",
+            error
+          );
+          receipt = txResult;
+        }
+      } else {
+        receipt = txResult;
+      }
     } else {
       // Fallback to direct ethers calls for non-Privy providers
       tx = await tokenMessenger.depositForBurn(
@@ -759,20 +779,30 @@ export class CCTPService {
       messageTransmitter.interface.getEvent("MessageSent");
     if (messageSentEvent) {
       const messageSentTopic = messageSentEvent.topicHash;
-      const messageSentLog = receipt.logs.find(
-        (log: any) => log.topics[0] === messageSentTopic
-      );
 
-      if (messageSentLog) {
-        const decodedLog = messageTransmitter.interface.parseLog({
-          topics: messageSentLog.topics,
-          data: messageSentLog.data,
-        });
+      // Safely check if logs exist and is an array
+      if (receipt && receipt.logs && Array.isArray(receipt.logs)) {
+        const messageSentLog = receipt.logs.find(
+          (log: any) => log.topics && log.topics[0] === messageSentTopic
+        );
 
-        if (decodedLog && decodedLog.args) {
-          messageBytes = decodedLog.args.message as string;
-          nonce = decodedLog.args.nonce as string;
+        if (messageSentLog) {
+          try {
+            const decodedLog = messageTransmitter.interface.parseLog({
+              topics: messageSentLog.topics,
+              data: messageSentLog.data,
+            });
+
+            if (decodedLog && decodedLog.args) {
+              messageBytes = decodedLog.args.message as string;
+              nonce = decodedLog.args.nonce as string;
+            }
+          } catch (error) {
+            console.warn("Failed to decode MessageSent event:", error);
+          }
         }
+      } else {
+        console.warn("Receipt logs not available, skipping event parsing");
       }
     }
 
@@ -1044,7 +1074,22 @@ export class CCTPService {
       );
 
       tx = txResult;
-      receipt = txResult; // Privy sendTransaction returns the receipt-like object
+
+      // For Privy, get the actual transaction receipt from the provider
+      const provider = signer.provider;
+      if (provider && txResult.hash) {
+        try {
+          receipt = await provider.waitForTransaction(txResult.hash);
+        } catch (error) {
+          console.warn(
+            "Failed to get transaction receipt from provider, using txResult:",
+            error
+          );
+          receipt = txResult;
+        }
+      } else {
+        receipt = txResult;
+      }
     } else {
       // Fallback to direct ethers calls for non-Privy providers
       tx = await messageTransmitter.receiveMessage(messageBytes, attestation);

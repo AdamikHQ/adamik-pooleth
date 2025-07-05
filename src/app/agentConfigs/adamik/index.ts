@@ -1,6 +1,6 @@
-// Adamik Main Agent Configuration
-// --------------------------------
-// This file defines the main Adamik agent. It is responsible for handling the real-time conversation and delegating all tool calls to the supervisor agent.
+// Pooleth Main Agent Configuration
+// ==============================
+// This file defines the main Pooleth agent. It is responsible for handling the real-time conversation and delegating all tool calls to the supervisor agent.
 //
 // IMPORTANT:
 // - The main agent is a pure proxy. It does NOT perform any business logic, validation, or formatting.
@@ -51,15 +51,15 @@ const createToolLogicProxy = () =>
     }
   );
 
-const adamikAgentConfig = {
-  name: "Adamik Voice Agent",
+const poolethAgentConfig = {
+  name: "Pooleth Voice Agent",
   publicDescription:
-    "Voice agent for Adamik that handles EVM blockchain operations and hardware wallet security. Delegates all tool calls to the supervisor agent.",
+    "Egg-celent crypto CFO voice agent that helps you grow and protect your crypto nest egg with EVM blockchain operations and hardware wallet security. Delegates all tool calls to the supervisor agent.",
   instructions: fullInstructions,
   tools: [...toolDefinitions, ...treasuryToolDefinitions] as Tool[],
   toolLogic: createToolLogicProxy(),
   downstreamAgents: [],
 };
 
-const adamikAgentConfigs = [adamikAgentConfig];
-export default adamikAgentConfigs;
+const poolethAgentConfigs = [poolethAgentConfig];
+export default poolethAgentConfigs;

@@ -31,18 +31,24 @@ When users request bridging:
 2. **Get bridge details**: Ask for source chain, destination chain, amount
 3. **Estimate fees**: Use \`estimateBridgeFee\` to show costs upfront
 
-**Step 2: Execute Bridge Transfer (3-Phase Process)**
+**Step 2: Execute Bridge Transfer (4-Phase Process)**
 
-**Phase 1 - Approval:**
+**Phase 1 - Get Source Balance:**
+- **CRITICAL**: Use \`getAccountState\` to fetch the user's USDC balance from the SOURCE chain
+- Extract the USDC balance from the source chain (not any other chain)
+- This balance is required for the \`initiateBridgeTransfer\` call
+
+**Phase 2 - Approval:**
 - Use \`approveBridgeTokens\` to approve USDC for the CCTP contract
 - Explain: First, I need to approve your USDC for bridging
 
-**Phase 2 - Burn (Initiate Transfer):**
+**Phase 3 - Burn (Initiate Transfer):**
 - Use \`initiateBridgeTransfer\` to burn USDC on source chain
+- **IMPORTANT**: Pass the USDC balance from the source chain (from Phase 1)
 - Explain: Now I'll burn your USDC on [source chain] and initiate the cross-chain transfer
 - Save the transaction hash and source domain for tracking
 
-**Phase 3 - Monitor & Complete:**
+**Phase 4 - Monitor & Complete:**
 - Use \`checkBridgeStatus\` to monitor attestation availability
 - When ready: Use \`completeBridgeTransfer\` to mint USDC on destination chain
 - Explain: Your transfer is ready! I'll now mint your USDC on [destination chain]
@@ -54,25 +60,35 @@ When users request bridging:
 **Your Response Flow**:
 1. **Confirm details**: I'll help you bridge 100 USDC from Ethereum to Base using Circle's CCTP protocol.
 
-2. **Estimate fees**: Call \`estimateBridgeFee\`
+2. **Get source balance**: Call \`getAccountState\` with chainId="ethereum" and user's address
+   - Extract USDC balance from Ethereum chain specifically
+   - Verify user has sufficient USDC on Ethereum
+
+3. **Estimate fees**: Call \`estimateBridgeFee\`
    - The estimated bridge fee is 0.1 USDC. The total you'll receive on Base will be approximately 99.9 USDC.
 
-3. **Execute approval**: Call \`approveBridgeTokens\`
+4. **Execute approval**: Call \`approveBridgeTokens\`
    - First, I need to approve your USDC for bridging. Please confirm the approval transaction.
 
-4. **Initiate transfer**: Call \`initiateBridgeTransfer\`
+5. **Initiate transfer**: Call \`initiateBridgeTransfer\`
+   - **IMPORTANT**: Use the USDC balance from step 2 (from Ethereum chain)
    - Now I'll burn your 100 USDC on Ethereum and initiate the cross-chain transfer to Base.
    - Save transaction hash and explain waiting period
 
-5. **Monitor status**: Call \`checkBridgeStatus\`
+6. **Monitor status**: Call \`checkBridgeStatus\`
    - I'm monitoring your bridge transfer. Circle's attestation service needs to verify the burn transaction.
    - This usually takes 10-20 minutes for Ethereum transactions.
 
-6. **Complete transfer**: Call \`completeBridgeTransfer\`
+7. **Complete transfer**: Call \`completeBridgeTransfer\`
    - Great! Your transfer is ready. I'll now mint your USDC on Base.
    - Your 99.9 USDC has been successfully bridged to Base!
 
 ### **CCTP Best Practices:**
+
+**Balance Validation:**
+- **ALWAYS** fetch balance from the source chain before initiating transfer
+- Never use balances from other chains - this will cause validation errors
+- Verify sufficient USDC balance on source chain before proceeding
 
 **Fee Transparency:**
 - Always show estimated fees upfront
@@ -100,4 +116,5 @@ When users request bridging:
 - **Attestation**: Circle provides cryptographic proof of burn before mint
 - **Single Transaction**: Each phase requires a separate transaction confirmation
 - **Status Tracking**: Always save transaction hash and source domain for monitoring
+- **Balance Source**: CRITICAL - Always use balance from source chain, not destination or other chains
 `;

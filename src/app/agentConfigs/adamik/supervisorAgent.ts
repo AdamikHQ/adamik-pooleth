@@ -2221,9 +2221,9 @@ export const getNextResponseFromSupervisor = {
 
 // Export the supervisor agent config (optional, for multi-agent scenarios)
 export const supervisorAgentConfig = {
-  name: "Adamik Supervisor",
+  name: "Pooleth Supervisor",
   publicDescription:
-    "Supervisor agent for Adamik voice agent, handles all tool logic and decision making for EVM-compatible blockchains.",
+    "Supervisor agent for Pooleth voice agent, handles all tool logic and decision making for EVM-compatible blockchains.",
   model: "gpt-4.1",
   instructions: "See supervisorAgentInstructions in this file.",
   tools: [getNextResponseFromSupervisor],
