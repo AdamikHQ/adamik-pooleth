@@ -880,11 +880,13 @@ const toolLogic: Record<string, any> = {
   secureFundsToLedger: async (
     {
       sourceAddress,
+      destinationAddress,
       amount,
       network = "ethereum",
       tokenAddress,
     }: {
       sourceAddress: string;
+      destinationAddress?: string;
       amount?: string;
       network?: string;
       tokenAddress?: string;
@@ -898,15 +900,31 @@ const toolLogic: Record<string, any> = {
         throw new Error("User context required for fund transfer");
       }
 
-      // Step 1: Connect to Ledger and get destination address
-      const connectionResult = await toolLogic.connectToLedgerHardwareWallet();
-      const connectionData = JSON.parse(connectionResult.content[0].text);
+      // Step 1: Get destination address (connect if not provided)
+      let finalDestinationAddress = destinationAddress;
+      let connectionData: any = { deviceName: "Ledger Device" };
 
-      if (!connectionData.success) {
-        throw new Error(`Failed to connect to Ledger: ${connectionData.error}`);
+      if (!finalDestinationAddress) {
+        console.log(
+          "🔌 No destination address provided, connecting to Ledger..."
+        );
+        const connectionResult =
+          await toolLogic.connectToLedgerHardwareWallet();
+        connectionData = JSON.parse(connectionResult.content[0].text);
+
+        if (!connectionData.success) {
+          throw new Error(
+            `Failed to connect to Ledger: ${connectionData.error}`
+          );
+        }
+
+        finalDestinationAddress = connectionData.address;
+      } else {
+        console.log(
+          "📍 Using provided destination address:",
+          finalDestinationAddress
+        );
       }
-
-      const destinationAddress = connectionData.address;
 
       // Step 2: Calculate transfer amount if not provided
       let transferAmount = amount;
@@ -1022,7 +1040,7 @@ const toolLogic: Record<string, any> = {
         transferResult = await toolLogic.sendTokenTransfer(
           {
             tokenSymbol,
-            to: destinationAddress,
+            to: finalDestinationAddress,
             amount: formattedAmount,
             chainId: network,
             sourceAddress,
@@ -1034,7 +1052,7 @@ const toolLogic: Record<string, any> = {
         // Native currency transfer - call requestUserSignature directly
         transferResult = await toolLogic.requestUserSignature(
           {
-            to: destinationAddress,
+            to: finalDestinationAddress,
             value: transferAmount,
             chainId: network,
             description: friendlyDescription,
@@ -1055,21 +1073,21 @@ const toolLogic: Record<string, any> = {
         const formattedAmount = (
           Number(transferAmount) / Math.pow(10, tokenDetails.decimals || 18)
         ).toFixed(6);
-        enhancedMessage = `Funds security operation prepared. Ready to transfer ${formattedAmount} ${tokenSymbol} from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+        enhancedMessage = `Funds security operation prepared. Ready to transfer ${formattedAmount} ${tokenSymbol} from Privy wallet to Ledger hardware wallet ${finalDestinationAddress}`;
       } else if (tokenAddress) {
-        enhancedMessage = `Funds security operation prepared. Ready to transfer tokens from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+        enhancedMessage = `Funds security operation prepared. Ready to transfer tokens from Privy wallet to Ledger hardware wallet ${finalDestinationAddress}`;
       } else {
         const ethAmount = Number(transferAmount) / Math.pow(10, 18);
         enhancedMessage = `Funds security operation prepared. Ready to transfer ${ethAmount.toFixed(
           6
-        )} ETH from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+        )} ETH from Privy wallet to Ledger hardware wallet ${finalDestinationAddress}`;
       }
 
       const result = {
         success: transferData.success,
         operation: "fund_security",
         sourceAddress,
-        destinationAddress,
+        destinationAddress: finalDestinationAddress,
         amount: transferAmount,
         network,
         tokenAddress,
@@ -1903,6 +1921,11 @@ export const toolDefinitions = [
         sourceAddress: {
           type: "string",
           description: "Source Privy wallet address",
+        },
+        destinationAddress: {
+          type: "string",
+          description:
+            "Destination Ledger wallet address (optional - will connect to Ledger if not provided)",
         },
         amount: {
           type: "string",

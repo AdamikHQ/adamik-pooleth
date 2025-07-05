@@ -71,6 +71,7 @@ When users want to secure funds on hardware wallet:
    **Step 4c: Execute the secure transfer**
    - Call secureFundsToLedger with these parameters:
      - sourceAddress: THE PRIVY WALLET ADDRESS from Step 4a (NOT the Ledger address!)
+     - destinationAddress: THE LEDGER ADDRESS from Step 4b connectToLedgerHardwareWallet result
      - network: the specific network (e.g., "optimism")
      - tokenAddress: for ERC-20 tokens (leave empty for native ETH)
      - amount: specific amount or leave empty for max transfer

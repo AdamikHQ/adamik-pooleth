@@ -100,7 +100,9 @@ When executing transactions, use this single-step process:
 **For "Send to my Ledger" or "Secure my funds" requests:**
 1. **STEP 1**: Call getAddress() to get user's Privy wallet address (SOURCE)
 2. **STEP 2**: Call connectToLedgerHardwareWallet() to get Ledger address (DESTINATION)  
-3. **STEP 3**: Call secureFundsToLedger() with sourceAddress = Privy wallet address from Step 1
+3. **STEP 3**: Call secureFundsToLedger() with:
+   - sourceAddress = Privy wallet address from Step 1
+   - destinationAddress = Ledger address from Step 2
 
 **NEVER use the Ledger address as sourceAddress - it's the destination!**
 `;
