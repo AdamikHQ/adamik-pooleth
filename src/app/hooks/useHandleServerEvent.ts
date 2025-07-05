@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
-import { useSendTransaction } from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { stringToChainId } from "@/app/config/privyChains";
 
 export interface UseHandleServerEventParams {
@@ -36,7 +36,7 @@ export function useHandleServerEvent({
   } = useTranscript();
 
   const { logServerEvent } = useEvent();
-  const { sendTransaction } = useSendTransaction();
+  const { sendTransaction } = usePrivy();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
 
@@ -65,8 +65,11 @@ export function useHandleServerEvent({
         fnResult
       );
 
-      // Handle transaction requests from requestUserSignature
-      if (functionCallParams.name === "requestUserSignature") {
+      // Handle transaction requests from requestUserSignature and sendTokenTransfer
+      if (
+        functionCallParams.name === "requestUserSignature" ||
+        functionCallParams.name === "sendTokenTransfer"
+      ) {
         try {
           const resultText = fnResult.content?.[0]?.text || "{}";
 
@@ -76,7 +79,7 @@ export function useHandleServerEvent({
             result = JSON.parse(resultText);
           } catch (parseError) {
             console.error(
-              "Failed to parse requestUserSignature result:",
+              `Failed to parse ${functionCallParams.name} result:`,
               resultText
             );
 
@@ -112,6 +115,7 @@ export function useHandleServerEvent({
 
               // Map string chainId to numeric chain ID for Privy using centralized config
               const numericChainId = stringToChainId[chainId];
+
               if (!numericChainId) {
                 throw new Error(
                   `Chain ID "${chainId}" is not supported. Supported chains: ${Object.keys(
@@ -129,12 +133,9 @@ export function useHandleServerEvent({
                 ...(gasLimit && { gasLimit }),
               };
 
-              // Use Privy's sendTransaction
+              // Use Privy's sendTransaction with the active wallet
               const transactionResult = await sendTransaction(
-                transactionRequest,
-                {
-                  address: userContext?.walletAddress,
-                }
+                transactionRequest
               );
 
               console.log("Transaction successful:", transactionResult.hash);

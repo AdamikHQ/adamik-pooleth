@@ -13,7 +13,6 @@ import {
   GetTransactionDetailsPathParams,
   PubkeyToAddressPathParams,
   PubkeyToAddressRequestBody,
-  EncodeTransactionRequestBodySchema,
 } from "./schemas";
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
@@ -78,79 +77,6 @@ const getChainTypeFromChainId = (chainId: string): string => {
 
   // Default to ethereum for unknown chains (assumed EVM-compatible)
   return "ethereum";
-};
-
-// Helper function to validate transaction body and provide helpful error messages
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const validateTransactionBody = (body: any, chainId: string): string[] => {
-  const errors: string[] = [];
-
-  // Check for required mode field
-  if (!body.mode) {
-    errors.push(
-      "MISSING REQUIRED FIELD 'mode': Must be one of: 'transfer', 'transferToken', 'stake', 'unstake', 'claimRewards', 'withdraw', 'registerStake', 'convertAsset', 'deployAccount'"
-    );
-  } else {
-    const validModes = [
-      "transfer",
-      "transferToken",
-      "stake",
-      "unstake",
-      "claimRewards",
-      "withdraw",
-      "registerStake",
-      "convertAsset",
-      "deployAccount",
-    ];
-    if (!validModes.includes(body.mode)) {
-      errors.push(
-        `INVALID MODE '${body.mode}': Must be one of: ${validModes.join(", ")}`
-      );
-    }
-  }
-
-  // Mode-specific validation
-  if (body.mode === "transfer" || body.mode === "transferToken") {
-    if (!body.recipientAddress) {
-      errors.push(
-        `MISSING REQUIRED FIELD 'recipientAddress': ${body.mode} transactions require a recipient address`
-      );
-    }
-
-    if (!body.amount && !body.useMaxAmount) {
-      errors.push(
-        `MISSING AMOUNT: ${body.mode} transactions require either 'amount' (as string in smallest units) or 'useMaxAmount: true'`
-      );
-    }
-
-    if (body.amount && typeof body.amount !== "string") {
-      errors.push(
-        `INVALID AMOUNT TYPE: 'amount' must be a string (e.g., "10000000"), not ${typeof body.amount}`
-      );
-    }
-
-    if (body.mode === "transferToken" && !body.tokenId) {
-      errors.push(
-        "MISSING REQUIRED FIELD 'tokenId': transferToken transactions require a token contract address"
-      );
-    }
-  }
-
-  if (body.mode === "stake" || body.mode === "unstake") {
-    if (!body.targetValidatorAddress && !body.validatorAddress) {
-      errors.push(
-        `MISSING VALIDATOR: ${body.mode} transactions require 'targetValidatorAddress' (stake) or 'validatorAddress' (unstake)`
-      );
-    }
-
-    if (!body.amount && !body.useMaxAmount) {
-      errors.push(
-        `MISSING AMOUNT: ${body.mode} transactions require either 'amount' (as string) or 'useMaxAmount: true'`
-      );
-    }
-  }
-
-  return errors;
 };
 
 // Tool logic implementations for all supported tools
@@ -366,101 +292,7 @@ const toolLogic: Record<string, any> = {
     const text = JSON.stringify(transaction);
     return { content: [{ type: "text", text }] };
   },
-  // Encodes transactions for multi-chain blockchain networks
-  encodeTransaction: async (
-    { chainId, body }: { chainId: string; body: any },
-    _userContext?: any
-  ) => {
-    // Make maximally flexible: wrap as needed and map common field names
-    let candidate = body;
 
-    // Map common field names to schema-expected names
-    if (candidate.type && !candidate.mode) {
-      candidate.mode = candidate.type;
-      delete candidate.type;
-    }
-    if (candidate.recipient && !candidate.recipientAddress) {
-      candidate.recipientAddress = candidate.recipient;
-      delete candidate.recipient;
-    }
-    if (candidate.sender && !candidate.senderAddress) {
-      candidate.senderAddress = candidate.sender;
-      delete candidate.sender;
-    }
-    if (candidate.from && !candidate.senderAddress) {
-      candidate.senderAddress = candidate.from;
-      delete candidate.from;
-    }
-    if (candidate.to && !candidate.recipientAddress) {
-      candidate.recipientAddress = candidate.to;
-      delete candidate.to;
-    }
-
-    // Ensure amount is always a string (schema requirement)
-    if (
-      candidate.amount !== undefined &&
-      typeof candidate.amount === "number"
-    ) {
-      candidate.amount = candidate.amount.toString();
-    }
-
-    // Validate the transaction body early and provide helpful error messages
-    const validationErrors = validateTransactionBody(candidate, chainId);
-    if (validationErrors.length > 0) {
-      const errorMessage = `Transaction validation failed:\n\n${validationErrors.join(
-        "\n"
-      )}\n\nPlease fix these issues and try again.`;
-      throw new Error(errorMessage);
-    }
-
-    // If senderAddress is missing for transfer transactions, get it from user's wallet
-    if (
-      (candidate.mode === "transfer" || candidate.mode === "transferToken") &&
-      !candidate.senderAddress &&
-      _userContext
-    ) {
-      try {
-        // Get the chain-specific wallet address for this transaction
-        const chainType = getChainTypeFromChainId(chainId);
-        const addressResult = await makeWalletRequest(
-          "getAddress",
-          { chainType }, // Pass the chain type to get the right wallet
-          _userContext
-        );
-        if (addressResult && addressResult.address) {
-          candidate.senderAddress = addressResult.address;
-        }
-      } catch (error) {
-        console.warn(
-          "Could not get user's wallet address for senderAddress:",
-          error
-        );
-      }
-    }
-
-    if (!candidate.transaction) {
-      candidate = { transaction: body };
-    }
-    if (!candidate.transaction.data) {
-      candidate = { transaction: { data: body } };
-    }
-    let parsedBody;
-    try {
-      parsedBody = EncodeTransactionRequestBodySchema.parse(candidate);
-    } catch (err) {
-      throw new Error(
-        "Invalid encodeTransaction body. Must match EncodeTransactionRequestBodySchema. " +
-          (err instanceof Error ? err.message : String(err))
-      );
-    }
-    const result = await makeProxyRequest(
-      `/${chainId}/transaction/encode`,
-      "POST",
-      JSON.stringify({ transaction: parsedBody.transaction })
-    );
-    const text = JSON.stringify(result);
-    return { content: [{ type: "text", text }] };
-  },
   // Sends EVM transactions using Privy's built-in sendTransaction
   requestUserSignature: async (
     params: any,
@@ -863,54 +695,7 @@ export const toolDefinitions = [
       required: ["chainId", "transactionId"],
     },
   },
-  {
-    type: "function" as const,
-    name: "encodeTransaction",
-    description: `
-Encodes a transaction for blockchain submission. Returns an encoded transaction ready for signing.
 
-REQUIRED FIELDS:
-- mode: MANDATORY discriminator field. Must be one of: "transfer", "transferToken", "stake", "unstake", "claimRewards", "withdraw", "registerStake", "convertAsset", "deployAccount"
-- senderAddress: Sender's wallet address (auto-populated if missing for transfer/transferToken)
-- amount: Amount in smallest units as STRING (e.g., "1000000000000000000" for 1 ETH) OR useMaxAmount: true
-
-EXAMPLES:
-
-ETH Transfer:
-{
-  "chainId": "ethereum",
-  "body": {
-    "mode": "transfer",
-    "recipientAddress": "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
-    "amount": "1000000000000000000"
-  }
-}
-
-Token Transfer:
-{
-  "chainId": "ethereum", 
-  "body": {
-    "mode": "transferToken",
-    "tokenId": "0xA0b86a33E6e87C6e81962e0c50c5B4e4b4c6c4f8",
-    "recipientAddress": "0x742d35Cc6634C0532925a3b8D4f5b66C6B1f8b8b",
-    "amount": "1000000000000000000"
-  }
-}
-
-CRITICAL: Always include the "mode" field - it's required for schema validation!`,
-    parameters: {
-      type: "object",
-      properties: {
-        chainId: {
-          type: "string",
-          description: "The ID of the blockchain network",
-        },
-        body: EncodeTransactionRequestBodySchema,
-      },
-      required: ["chainId", "body"],
-      additionalProperties: false,
-    },
-  },
   {
     type: "function" as const,
     name: "requestUserSignature",
