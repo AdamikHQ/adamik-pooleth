@@ -1,5 +1,7 @@
 # Pooleth – Your Egg-celent Crypto Nest Manager 🐣
 
+![Pooleth Logo](logo-pooleth.png)
+
 **ETH Global Cannes 2025 Hackathon Project**
 
 Meet Pooleth, your AI-powered crypto CFO and personal mother hen for DeFi. Basically, we got tired of manually checking balances across different chains and losing track of yield opportunities, so we built a voice assistant that does the heavy lifting. Talk to it like you're talking to a friend, and it'll help you manage your portfolio without the usual DeFi headaches.
