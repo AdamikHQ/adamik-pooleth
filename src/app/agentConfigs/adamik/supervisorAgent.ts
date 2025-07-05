@@ -544,34 +544,65 @@ const toolLogic: Record<string, any> = {
         // Store the promise resolvers globally so the modal can access them
         const promiseId = Math.random().toString(36).substr(2, 9);
         console.log(
-          `🆔 Creating __ledgerConnectionPromise with ID: ${promiseId}`
+          `🆔 SUPERVISOR: Creating __ledgerConnectionPromise with ID: ${promiseId}`
         );
 
-        (window as any).__ledgerConnectionPromise = {
-          resolve,
-          reject,
+        const promiseData = {
+          resolve: (result: any) => {
+            console.log(
+              `✅ SUPERVISOR: Promise ${promiseId} resolved with:`,
+              result
+            );
+            resolve(result);
+          },
+          reject: (error: any) => {
+            console.log(
+              `❌ SUPERVISOR: Promise ${promiseId} rejected with:`,
+              error
+            );
+            reject(error);
+          },
           id: promiseId,
+          timeoutId: null as any,
         };
 
-        console.log("📞 Calling __triggerLedgerModal()...");
+        (window as any).__ledgerConnectionPromise = promiseData;
+        console.log("📋 SUPERVISOR: Promise stored globally:", promiseData);
+
+        console.log("📞 SUPERVISOR: Calling __triggerLedgerModal()...");
         // Trigger the modal to open
         (window as any).__triggerLedgerModal?.();
 
         // Set a timeout to prevent hanging
         const timeoutId = setTimeout(() => {
           console.warn(
-            `⏰ Ledger connection timed out after 60 seconds for promise ${promiseId}`
+            `⏰ SUPERVISOR: Ledger connection timed out after 60 seconds for promise ${promiseId}`
           );
+          console.log(
+            "🔍 SUPERVISOR: Current promise at timeout:",
+            (window as any).__ledgerConnectionPromise
+          );
+
           // Clean up the global promise before rejecting
           if ((window as any).__ledgerConnectionPromise?.id === promiseId) {
             delete (window as any).__ledgerConnectionPromise;
-            console.log(`🧹 Cleaned up timed out promise ${promiseId}`);
+            console.log(
+              `🧹 SUPERVISOR: Cleaned up timed out promise ${promiseId}`
+            );
+          } else {
+            console.warn(
+              `⚠️ SUPERVISOR: Promise ${promiseId} not found or already replaced at timeout`
+            );
           }
+
           reject(new Error("Ledger connection timed out after 60 seconds"));
         }, 60000);
 
         // Store timeout ID for potential cleanup
-        (window as any).__ledgerConnectionPromise.timeoutId = timeoutId;
+        promiseData.timeoutId = timeoutId;
+        console.log(
+          `⏰ SUPERVISOR: Timeout ${timeoutId} set for promise ${promiseId}`
+        );
       });
 
       console.log("🎉 Received result from Ledger modal:", result);

@@ -95,15 +95,33 @@ export function LedgerFlowModal({
     setShowRetryOptions(false);
     flowActiveRef.current = false;
 
-    // Clean up global handlers
-    if ((window as any).__ledgerConnectionPromise) {
-      delete (window as any).__ledgerConnectionPromise;
+    // IMPORTANT: Don't delete __ledgerConnectionPromise here!
+    // It might be from the supervisor agent and should only be cleaned up
+    // when we actually resolve/reject it, not during modal reset.
+
+    // Only clean up hook-specific promises
+    if ((window as any).__ledgerHookPromise) {
+      delete (window as any).__ledgerHookPromise;
     }
   };
 
   // Reset when modal opens
   useEffect(() => {
     if (isOpen && !flowActiveRef.current) {
+      console.log("📂 MODAL: Modal opening, checking global state...");
+      console.log(
+        "🔍 MODAL: __ledgerConnectionPromise exists:",
+        !!(window as any).__ledgerConnectionPromise
+      );
+      console.log(
+        "🔍 MODAL: __ledgerConnectionPromise details:",
+        (window as any).__ledgerConnectionPromise
+      );
+      console.log(
+        "🔍 MODAL: __ledgerHookPromise exists:",
+        !!(window as any).__ledgerHookPromise
+      );
+
       resetModalState();
       // Start flow after a short delay to ensure clean state
       setTimeout(() => {
@@ -119,7 +137,36 @@ export function LedgerFlowModal({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      resetModalState();
+      // On unmount, we should reject any pending promises to avoid hanging
+      if ((window as any).__ledgerConnectionPromise) {
+        console.log("🧹 UNMOUNT: Cleaning up supervisor promise");
+        try {
+          (window as any).__ledgerConnectionPromise.reject(
+            new Error("Modal unmounted")
+          );
+        } catch (e) {
+          console.warn("Failed to reject supervisor promise on unmount:", e);
+        }
+        delete (window as any).__ledgerConnectionPromise;
+      }
+
+      if ((window as any).__ledgerHookPromise) {
+        console.log("🧹 UNMOUNT: Cleaning up hook promise");
+        try {
+          (window as any).__ledgerHookPromise.reject(
+            new Error("Modal unmounted")
+          );
+        } catch (e) {
+          console.warn("Failed to reject hook promise on unmount:", e);
+        }
+        delete (window as any).__ledgerHookPromise;
+      }
+
+      // Reset other state
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -174,29 +221,64 @@ export function LedgerFlowModal({
     setIsProcessing(false);
     flowActiveRef.current = false;
 
+    // Debug: Check what promises exist
+    console.log("🔍 DEBUGGING - Checking promises:");
+    console.log(
+      "  __ledgerConnectionPromise exists:",
+      !!(window as any).__ledgerConnectionPromise
+    );
+    console.log(
+      "  __ledgerConnectionPromise details:",
+      (window as any).__ledgerConnectionPromise
+    );
+    console.log(
+      "  __ledgerHookPromise exists:",
+      !!(window as any).__ledgerHookPromise
+    );
+
     // Send to global promise handler
     if ((window as any).__ledgerConnectionPromise) {
-      console.log("🔗 Resolving promise for agent...");
+      console.log("🔗 Resolving main promise for agent...");
+      console.log(
+        "📋 Promise details:",
+        (window as any).__ledgerConnectionPromise
+      );
 
       // Clear timeout if it exists (from supervisor agent)
       if ((window as any).__ledgerConnectionPromise.timeoutId) {
         clearTimeout((window as any).__ledgerConnectionPromise.timeoutId);
-        console.log("⏰ Cleared supervisor agent timeout");
+        console.log(
+          "⏰ Cleared supervisor agent timeout ID:",
+          (window as any).__ledgerConnectionPromise.timeoutId
+        );
       }
 
-      (window as any).__ledgerConnectionPromise.resolve(connectionResult);
+      try {
+        (window as any).__ledgerConnectionPromise.resolve(connectionResult);
+        console.log("✅ Main promise resolved successfully");
+      } catch (error) {
+        console.error("❌ Error resolving main promise:", error);
+      }
+
       delete (window as any).__ledgerConnectionPromise;
-      console.log("✅ Promise resolved and cleaned up");
+      console.log("🧹 Main promise cleaned up");
     } else {
-      console.warn("⚠️ No promise found - agent might not receive result!");
+      console.warn(
+        "⚠️ No main promise found - supervisor agent won't receive result!"
+      );
     }
 
     // Also resolve hook promise if it exists
     if ((window as any).__ledgerHookPromise) {
       console.log("🔗 Resolving hook promise...");
-      (window as any).__ledgerHookPromise.resolve(connectionResult);
+      try {
+        (window as any).__ledgerHookPromise.resolve(connectionResult);
+        console.log("✅ Hook promise resolved successfully");
+      } catch (error) {
+        console.error("❌ Error resolving hook promise:", error);
+      }
       delete (window as any).__ledgerHookPromise;
-      console.log("✅ Hook promise resolved and cleaned up");
+      console.log("🧹 Hook promise cleaned up");
     }
 
     // Send to callback
@@ -560,40 +642,34 @@ export function useLedgerFlow() {
 
   const startFlow = (): Promise<LedgerConnectionResult> => {
     console.log("🎬 Starting Ledger flow via hook");
+    console.log(
+      "🔍 Existing promise check:",
+      !!(window as any).__ledgerConnectionPromise
+    );
 
-    // Check if supervisor agent already created a promise
-    if ((window as any).__ledgerConnectionPromise) {
-      console.log("🔗 Found existing supervisor agent promise, using it");
-      // Just open the modal, the existing promise will be resolved by the modal
-      setIsModalOpen(true);
-      setResult(null);
-      console.log("📂 Modal opened for supervisor agent flow");
+    // Always create our own promise for the hook, but don't overwrite supervisor promise
+    return new Promise((resolve, reject) => {
+      // Store hook resolvers separately so we can notify the hook caller
+      (window as any).__ledgerHookPromise = { resolve, reject };
+      console.log("🔗 Hook promise stored");
 
-      // Return a promise that will be resolved when the modal completes
-      // This is for the hook caller, but the real result goes to supervisor agent
-      return new Promise((resolve, reject) => {
-        // Store hook resolvers separately so we can notify both
-        (window as any).__ledgerHookPromise = { resolve, reject };
-      });
-    } else {
-      console.log("🔗 Creating new promise for hook-based flow");
-
-      return new Promise((resolve, reject) => {
-        // Store promise resolvers globally for the modal to access
-        // Compatible with supervisor agent's promise structure
+      // If no supervisor promise exists, also create the main promise
+      if (!(window as any).__ledgerConnectionPromise) {
+        console.log("🔗 Creating main promise for hook-only flow");
         (window as any).__ledgerConnectionPromise = {
           resolve,
           reject,
           id: "hook-" + Math.random().toString(36).substr(2, 9),
         };
-        console.log("🔗 Promise handlers stored globally");
+      } else {
+        console.log("🔗 Using existing supervisor promise");
+      }
 
-        // Open modal
-        setIsModalOpen(true);
-        setResult(null);
-        console.log("📂 Modal opened, waiting for user interaction");
-      });
-    }
+      // Open modal
+      setIsModalOpen(true);
+      setResult(null);
+      console.log("📂 Modal opened, waiting for user interaction");
+    });
   };
 
   const closeModal = () => {

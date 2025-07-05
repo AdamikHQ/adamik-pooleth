@@ -113,16 +113,20 @@ export default function App() {
   // Set up the global trigger function for the voice agent
   useEffect(() => {
     (window as any).__triggerLedgerModal = () => {
-      console.log("🔐 Voice agent triggered Ledger modal");
+      console.log("🔐 APP: Voice agent triggered Ledger modal");
       console.log(
-        "🔗 Checking for __ledgerConnectionPromise:",
+        "🔗 APP: Checking for __ledgerConnectionPromise:",
         !!(window as any).__ledgerConnectionPromise
+      );
+      console.log(
+        "📋 APP: Promise details:",
+        (window as any).__ledgerConnectionPromise
       );
 
       // Simply open the modal - it will handle the promise resolution
-      console.log("🚀 Opening Ledger modal...");
+      console.log("🚀 APP: Opening Ledger modal...");
       startLedgerFlow().catch((error) => {
-        console.error("❌ Failed to start Ledger flow:", error);
+        console.error("❌ APP: Failed to start Ledger flow:", error);
       });
     };
 
