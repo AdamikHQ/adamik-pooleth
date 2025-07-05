@@ -13,6 +13,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import Transcript from "./components/Transcript";
 import Events from "./components/Events";
 import BottomToolbar from "./components/BottomToolbar";
+import { LedgerFlowModal, useLedgerFlow } from "./components/LedgerFlowModal";
 
 // Types
 import { AgentConfig, SessionStatus } from "@/app/types";
@@ -71,6 +72,16 @@ function App() {
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
     useAudioDownload();
+
+  // Initialize Ledger flow modal
+  const {
+    isModalOpen: isLedgerModalOpen,
+    startFlow: startLedgerFlow,
+    updateStep: updateLedgerStep,
+    completeStep: completeLedgerStep,
+    errorStep: errorLedgerStep,
+    closeModal: closeLedgerModal,
+  } = useLedgerFlow();
 
   // Get user's embedded wallet
   const userWallet = wallets.find(
@@ -180,6 +191,122 @@ function App() {
       disconnectFromRealtime();
     }
   }, [authenticated]);
+
+  // Monitor transcript for Ledger operations and update modal
+  useEffect(() => {
+    const lastItem = transcriptItems[transcriptItems.length - 1];
+    if (!lastItem || lastItem.role !== "assistant") return;
+
+    // Check if the transcript item data contains function calls
+    const itemData = lastItem.data as any;
+    if (!itemData) return;
+
+    // Check for Ledger function calls in the data
+    if (itemData.function_calls) {
+      itemData.function_calls.forEach((call: any) => {
+        const isLedgerOperation = [
+          "discoverLedgerDevices",
+          "connectLedgerDevice",
+          "openLedgerEthereumApp",
+          "getLedgerEthereumAddress",
+          "secureFundsToLedger",
+        ].includes(call.name);
+
+        if (isLedgerOperation) {
+          // Start the flow if not already open
+          if (!isLedgerModalOpen && call.name === "discoverLedgerDevices") {
+            startLedgerFlow();
+          }
+
+          // Update step based on function call
+          switch (call.name) {
+            case "discoverLedgerDevices":
+              updateLedgerStep("discover", "in-progress");
+              break;
+            case "connectLedgerDevice":
+              completeLedgerStep("discover");
+              updateLedgerStep("connect", "in-progress");
+              break;
+            case "openLedgerEthereumApp":
+              completeLedgerStep("connect");
+              updateLedgerStep("open-app", "in-progress");
+              break;
+            case "getLedgerEthereumAddress":
+              completeLedgerStep("open-app");
+              updateLedgerStep("get-address", "in-progress");
+              break;
+          }
+        }
+      });
+    }
+
+    // Check for function call results
+    if (itemData.function_call_results) {
+      itemData.function_call_results.forEach((result: any) => {
+        const isLedgerResult = [
+          "discoverLedgerDevices",
+          "connectLedgerDevice",
+          "openLedgerEthereumApp",
+          "getLedgerEthereumAddress",
+          "secureFundsToLedger",
+        ].includes(result.name || "");
+
+        if (isLedgerResult) {
+          try {
+            const resultData =
+              typeof result.output === "string"
+                ? JSON.parse(result.output)
+                : result.output;
+            const success = resultData.success !== false;
+
+            // Update step based on result
+            switch (result.name) {
+              case "discoverLedgerDevices":
+                if (success) {
+                  completeLedgerStep("discover");
+                } else {
+                  errorLedgerStep("discover");
+                }
+                break;
+              case "connectLedgerDevice":
+                if (success) {
+                  completeLedgerStep("connect");
+                } else {
+                  errorLedgerStep("connect");
+                }
+                break;
+              case "openLedgerEthereumApp":
+                if (success) {
+                  completeLedgerStep("open-app");
+                } else {
+                  errorLedgerStep("open-app");
+                }
+                break;
+              case "getLedgerEthereumAddress":
+                if (success) {
+                  completeLedgerStep("get-address");
+                  // Auto-close modal after successful completion
+                  setTimeout(() => closeLedgerModal(), 2000);
+                } else {
+                  errorLedgerStep("get-address");
+                }
+                break;
+            }
+          } catch (error) {
+            console.warn("Failed to parse function call result:", error);
+          }
+        }
+      });
+    }
+  }, [
+    transcriptItems,
+    isLedgerModalOpen,
+    startLedgerFlow,
+    updateLedgerStep,
+    completeLedgerStep,
+    errorLedgerStep,
+    closeLedgerModal,
+  ]);
 
   const fetchEphemeralKey = async (): Promise<string | null> => {
     logClientEvent({ url: "/session" }, "fetch_session_token_request");
@@ -694,6 +821,17 @@ function App() {
         setIsEventsPaneExpanded={setIsEventsPaneExpanded}
         isAudioPlaybackEnabled={isAudioPlaybackEnabled}
         setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
+      />
+
+      {/* Ledger Hardware Wallet Flow Modal */}
+      <LedgerFlowModal
+        isOpen={isLedgerModalOpen}
+        onClose={closeLedgerModal}
+        onRetry={() => {
+          // Reset the modal and start fresh
+          closeLedgerModal();
+          setTimeout(() => startLedgerFlow(), 100);
+        }}
       />
     </div>
   );
