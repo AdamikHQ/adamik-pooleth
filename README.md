@@ -29,9 +29,82 @@ A sophisticated voice-enabled blockchain assistant powered by OpenAI's Realtime 
 - **Embedded Wallets**: Secure, user-specific wallet creation and management
 - **Multi-User Support**: Individual user sessions with personal wallet access
 - **Authentication Guards**: Protected routes ensuring secure access
-- **EVM Transactions**: Secure transaction processing via Privy's built-in modal
-- **Hardware Wallet Support**: Ledger device integration for secure cold storage
+- **EVM Transactions**: Secure transaction processing via Privy's built-in modal with automatic execution
+- **Hardware Wallet Support**: Ledger device integration for secure cold storage with seamless transaction flow
 - **Cross-Chain Bridging**: CCTP (Cross-Chain Transfer Protocol) integration for USDC transfers
+- **Dynamic Token Details**: Real-time token information fetching from blockchain state (symbols, decimals, formatted amounts)
+- **Intelligent Transaction Routing**: Automatic detection and execution of transaction requests from any function
+
+## 🚀 Recent Improvements
+
+### Transaction Execution Enhancement
+
+**Problem Solved**: Previously, transaction requests were being "prepared" but not actually executed. Functions like `secureFundsToLedger` would successfully connect to Ledger devices and prepare transactions, but the actual blockchain transactions were never initiated.
+
+**Solution Implemented**:
+
+- **Universal Transaction Detection**: Removed restrictive function name checking - now ANY function that returns a `transaction_request` will trigger execution
+- **Nested Transaction Support**: Added support for nested transaction requests (e.g., `secureFundsToLedger` → `transferAssets` → `sendTokenTransfer`)
+- **Intelligent Routing**: Automatically detects both direct and nested transaction requests and routes them to Privy's `sendTransaction`
+- **Robust Error Handling**: Enhanced error handling with proper TypeScript types and fallback values
+
+**Technical Details**:
+
+```typescript
+// Before: Only specific functions triggered transactions
+if (
+  functionCallParams.name === "requestUserSignature" ||
+  functionCallParams.name === "sendTokenTransfer"
+) {
+  // Handle transaction...
+}
+
+// After: Any function with transaction_request triggers execution
+if (result.type === "transaction_request" && result.data) {
+  await handleTransactionRequest(result, callId);
+} else if (result.transferResult?.type === "transaction_request") {
+  await handleTransactionRequest(result.transferResult, callId);
+}
+```
+
+### Dynamic Token Details Integration
+
+**Problem Solved**: Token information was hardcoded with assumptions (e.g., "USDC" based on address patterns, assumed decimals).
+
+**Solution Implemented**:
+
+- **Real-time Token Fetching**: Dynamically fetches token details from `getAccountState` responses
+- **Accurate Formatting**: Uses actual token symbols, names, and decimal precision from blockchain data
+- **Enhanced User Experience**: Rich transaction descriptions with proper token amounts and symbols
+- **Fallback Handling**: Graceful degradation when token details can't be fetched
+
+**Example Enhancement**:
+
+```typescript
+// Before: Hardcoded assumptions
+const tokenSymbol = tokenAddress.toLowerCase().includes("usdc")
+  ? "USDC"
+  : "tokens";
+
+// After: Real blockchain data
+const tokenDetails = accountData?.balances?.tokens?.find(
+  (token: any) => token.token?.id?.toLowerCase() === tokenAddress.toLowerCase()
+);
+const tokenSymbol =
+  tokenDetails.token?.ticker || tokenDetails.token?.name || "tokens";
+const formattedAmount =
+  tokenDetails.formattedAmount || calculateFormattedAmount(amount, decimals);
+```
+
+### Ledger Integration Improvements
+
+**Enhanced Features**:
+
+- **Seamless Connection Flow**: Streamlined Ledger device connection with proper promise handling
+- **Real-time Status Updates**: Visual indicators for Ledger connection status
+- **Automatic Address Display**: Connected Ledger addresses appear in the header with copy functionality
+- **Robust Error Recovery**: Better error handling for device connection issues
+- **Session Management**: Proper cleanup of Ledger sessions and connection state
 
 ## 🏗️ Architecture
 
