@@ -2089,7 +2089,8 @@ export const toolDefinitions = [
         },
         usdcBalance: {
           type: "string",
-          description: "The USDC balance of the sender account",
+          description:
+            "The ACTUAL USDC balance of the sender account (retrieved from getAccountState). This MUST be the user's current USDC balance, NOT the transfer amount. This is used to validate that the user has enough USDC to cover both the transfer amount and bridge fees.",
         },
       },
       required: [
