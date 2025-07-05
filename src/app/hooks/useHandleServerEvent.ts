@@ -4,7 +4,6 @@ import { useRef } from "react";
 import { ServerEvent, SessionStatus, AgentConfig } from "@/app/types";
 import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
-import { usePrivy } from "@privy-io/react-auth";
 import { stringToChainId } from "@/app/config/privyChains";
 
 export interface UseHandleServerEventParams {
@@ -36,7 +35,6 @@ export function useHandleServerEvent({
   } = useTranscript();
 
   const { logServerEvent } = useEvent();
-  const { sendTransaction } = usePrivy();
 
   const assistantDeltasRef = useRef<{ [itemId: string]: string }>({});
 
@@ -128,7 +126,7 @@ export function useHandleServerEvent({
           transactionRequest.type === "transaction_request" &&
           transactionRequest.data
         ) {
-          // Use Privy's sendTransaction for EVM transaction handling
+          // Use our custom Transaction Review Modal instead of Privy's default modal
           try {
             const transactionData = transactionRequest.data;
             const { to, value, chainId, data, gasLimit } = transactionData;
@@ -141,7 +139,7 @@ export function useHandleServerEvent({
               throw new Error("No transaction value found");
             }
 
-            // Map string chainId to numeric chain ID for Privy using centralized config
+            // Validate chain support
             const numericChainId = stringToChainId[chainId];
 
             if (!numericChainId) {
@@ -152,21 +150,100 @@ export function useHandleServerEvent({
               );
             }
 
-            // Build transaction request for Privy
-            const transactionRequestForPrivy = {
+            // Prepare transaction data for our custom modal
+            const modalTransactionData = {
               to,
               value: value.toString(),
-              chainId: numericChainId, // ✅ Use numeric chain ID for Privy
+              chainId,
               ...(data && { data }),
               ...(gasLimit && { gasLimit }),
+              ...(transactionRequest.message && {
+                description: transactionRequest.message,
+              }),
             };
 
-            // Use Privy's sendTransaction with the active wallet
-            const transactionResult = await sendTransaction(
-              transactionRequestForPrivy
+            console.log("💸 Triggering custom Transaction Review modal...");
+
+            // Check if trigger function exists
+            if (
+              typeof (window as any).__triggerTransactionModal !== "function"
+            ) {
+              throw new Error(
+                "Transaction modal trigger function not available"
+              );
+            }
+
+            // Store promise resolvers globally so the modal can access them
+            const promiseId = Math.random().toString(36).substr(2, 9);
+            console.log(
+              `🆔 TRANSACTION: Creating __transactionReviewPromise with ID: ${promiseId}`
             );
 
-            console.log("Transaction successful:", transactionResult.hash);
+            const result = await new Promise<any>((resolve, reject) => {
+              const promiseData = {
+                resolve: (result: any) => {
+                  console.log(
+                    `✅ TRANSACTION: Promise ${promiseId} resolved with:`,
+                    result
+                  );
+                  resolve(result);
+                },
+                reject: (error: any) => {
+                  console.log(
+                    `❌ TRANSACTION: Promise ${promiseId} rejected with:`,
+                    error
+                  );
+                  reject(error);
+                },
+                id: promiseId,
+                timeoutId: null as any,
+              };
+
+              (window as any).__transactionReviewPromise = promiseData;
+              console.log(
+                "📋 TRANSACTION: Promise stored globally:",
+                promiseData
+              );
+
+              console.log(
+                "📞 TRANSACTION: Calling __triggerTransactionModal()..."
+              );
+              // Trigger the modal to open
+              (window as any).__triggerTransactionModal?.(modalTransactionData);
+
+              // Set a timeout to prevent hanging
+              const timeoutId = setTimeout(() => {
+                console.warn(
+                  `⏰ TRANSACTION: Transaction modal timed out after 60 seconds for promise ${promiseId}`
+                );
+
+                // Clean up the global promise before rejecting
+                if (
+                  (window as any).__transactionReviewPromise?.id === promiseId
+                ) {
+                  delete (window as any).__transactionReviewPromise;
+                  console.log(
+                    `🧹 TRANSACTION: Cleaned up timed out promise ${promiseId}`
+                  );
+                } else {
+                  console.warn(
+                    `⚠️ TRANSACTION: Promise ${promiseId} not found or already replaced at timeout`
+                  );
+                }
+
+                reject(
+                  new Error("Transaction modal timed out after 60 seconds")
+                );
+              }, 60000);
+
+              // Store timeout ID for potential cleanup
+              promiseData.timeoutId = timeoutId;
+              console.log(
+                `⏰ TRANSACTION: Timeout ${timeoutId} set for promise ${promiseId}`
+              );
+            });
+
+            console.log("🎉 Received result from Transaction modal:", result);
 
             // Send successful response back to the agent
             sendClientEvent({
@@ -175,18 +252,18 @@ export function useHandleServerEvent({
                 type: "function_call_output",
                 call_id: callId,
                 output: JSON.stringify({
-                  success: true,
-                  transactionHash: transactionResult.hash,
-                  to: to,
-                  value: value,
-                  chainId: chainId,
+                  success: result.success,
+                  transactionHash: result.transactionHash,
+                  to: modalTransactionData.to,
+                  value: modalTransactionData.value,
+                  chainId: modalTransactionData.chainId,
                 }),
               },
             });
             sendClientEvent({ type: "response.create" });
             return;
-          } catch (error) {
-            console.error("Transaction failed:", error);
+          } catch (error: any) {
+            console.error("❌ Transaction modal failed:", error);
 
             // Send error response back to the agent
             sendClientEvent({

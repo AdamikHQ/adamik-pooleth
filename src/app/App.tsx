@@ -14,6 +14,10 @@ import Transcript from "./components/Transcript";
 import Events from "./components/Events";
 import BottomToolbar from "./components/BottomToolbar";
 import { LedgerFlowModal, useLedgerFlow } from "./components/LedgerFlowModal";
+import {
+  TransactionReviewModal,
+  useTransactionReview,
+} from "./components/TransactionReviewModal";
 
 // Types
 import { AgentConfig, SessionStatus } from "@/app/types";
@@ -98,6 +102,16 @@ export default function App() {
     startFlow: startLedgerFlow,
   } = useLedgerFlow();
 
+  // Initialize Transaction Review modal
+  const {
+    isOpen: isTransactionModalOpen,
+    transactionData,
+    closeModal: closeTransactionModal,
+    handleComplete: handleTransactionComplete,
+    handleError: handleTransactionError,
+    openModal: openTransactionModal,
+  } = useTransactionReview();
+
   // Custom handlers to track Ledger connection state
   const handleLedgerComplete = (result: any) => {
     console.log("🎉 Ledger connection completed:", result);
@@ -139,12 +153,29 @@ export default function App() {
       });
     };
 
-    // Cleanup on unmount (but don't clean up the promise here as it might be in use)
+    // Set up global transaction modal trigger
+    (window as any).__triggerTransactionModal = (transactionData: any) => {
+      console.log("💸 APP: Voice agent triggered Transaction modal");
+      console.log("📋 APP: Transaction data:", transactionData);
+      console.log(
+        "🔗 APP: Checking for __transactionReviewPromise:",
+        !!(window as any).__transactionReviewPromise
+      );
+
+      // Open our custom transaction modal
+      console.log("🚀 APP: Opening Transaction Review modal...");
+      openTransactionModal(transactionData).catch((error) => {
+        console.error("❌ APP: Failed to open transaction modal:", error);
+      });
+    };
+
+    // Cleanup on unmount (but don't clean up the promises here as they might be in use)
     return () => {
       delete (window as any).__triggerLedgerModal;
-      // Don't delete __ledgerConnectionPromise here as it causes timing issues
+      delete (window as any).__triggerTransactionModal;
+      // Don't delete promises here as it causes timing issues
     };
-  }, []); // Remove startLedgerFlow from dependencies to prevent premature cleanup
+  }, []); // Remove dependencies to prevent premature cleanup
 
   // Get user's embedded wallet
   const userWallet = wallets.find(
@@ -920,6 +951,15 @@ export default function App() {
         onClose={closeLedgerModal}
         onComplete={handleLedgerComplete}
         onError={handleLedgerError}
+      />
+
+      {/* Transaction Review Modal */}
+      <TransactionReviewModal
+        isOpen={isTransactionModalOpen}
+        transactionData={transactionData}
+        onClose={closeTransactionModal}
+        onConfirm={handleTransactionComplete}
+        onError={handleTransactionError}
       />
     </div>
   );

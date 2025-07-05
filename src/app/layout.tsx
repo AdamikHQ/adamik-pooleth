@@ -56,6 +56,7 @@ export default function RootLayout({
             embeddedWallets: {
               createOnLogin: "users-without-wallets", // Auto-create wallets
               requireUserPasswordOnCreate: false, // Simplify wallet creation
+              showWalletUIs: false, // Disable Privy's default transaction modals - we use our custom modal
             },
             // EVM chains configuration using viem/chains (recommended by Privy)
             defaultChain: defaultChain,
