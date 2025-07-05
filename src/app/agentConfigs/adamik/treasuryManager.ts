@@ -13,7 +13,7 @@ import {
 
 // Treasury management rules and strategies
 const TREASURY_RULES = {
-  SECURITY_THRESHOLD: 500, // USDC threshold for Ledger security
+  SECURITY_THRESHOLD: 10, // USDC threshold for Ledger security
   MIN_YIELD_IMPROVEMENT: 0.5, // Minimum yield improvement to justify bridge (0.5%)
   SUPPORTED_YIELD_PROTOCOLS: ["aave"], // Simplified: only Aave
   RISK_TOLERANCE: "moderate", // conservative, moderate, aggressive

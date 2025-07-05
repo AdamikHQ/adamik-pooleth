@@ -775,13 +775,15 @@ export default function App() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(userWallet.address);
-                      // Simple feedback - you could add a toast notification here
+                      // Simple feedback - replace icon with checkmark
                       const button =
                         document.activeElement as HTMLButtonElement;
-                      const originalText = button.textContent;
-                      button.textContent = "✓";
+                      const originalHTML = button.innerHTML;
+                      button.innerHTML = "✓";
+                      button.style.color = "rgb(34, 197, 94)"; // green color
                       setTimeout(() => {
-                        button.textContent = originalText;
+                        button.innerHTML = originalHTML;
+                        button.style.color = "";
                       }, 1000);
                     }}
                     className="p-1 hover:bg-gray-100 rounded transition-colors"
@@ -838,13 +840,15 @@ export default function App() {
                         navigator.clipboard.writeText(
                           ledgerConnectionInfo.address
                         );
-                        // Simple feedback - you could add a toast notification here
+                        // Simple feedback - replace icon with checkmark
                         const button =
                           document.activeElement as HTMLButtonElement;
-                        const originalText = button.textContent;
-                        button.textContent = "✓";
+                        const originalHTML = button.innerHTML;
+                        button.innerHTML = "✓";
+                        button.style.color = "rgb(34, 197, 94)"; // green color
                         setTimeout(() => {
-                          button.textContent = originalText;
+                          button.innerHTML = originalHTML;
+                          button.style.color = "";
                         }, 1000);
                       }
                     }}
