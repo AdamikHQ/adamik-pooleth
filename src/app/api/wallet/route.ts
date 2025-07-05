@@ -15,7 +15,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ publicKey: wallet.signingKey.publicKey });
       case 'getAddress':
         return NextResponse.json({ address: wallet.address });
-      case 'signTranscation':
+      case 'signTransaction':
         const signature = await wallet.signTransaction(body.tx);
         return NextResponse.json({ signature });
       default:
