@@ -155,6 +155,28 @@ class LedgerService {
 
     console.log(`🔗 Connecting to device: ${deviceId}`);
 
+    // Check if device is already connected
+    const existingDevice = this.connectedDevices.get(deviceId);
+    if (existingDevice && existingDevice.sessionId) {
+      console.log(
+        `✅ Device already connected, reusing session: ${existingDevice.sessionId}`
+      );
+
+      // Verify the session is still valid
+      try {
+        const connectedDevice = this.dmk.getConnectedDevice({
+          sessionId: existingDevice.sessionId,
+        });
+        if (connectedDevice && connectedDevice.id === deviceId) {
+          console.log(`✅ Reusing existing connection: ${existingDevice.name}`);
+          return existingDevice;
+        }
+      } catch {
+        console.log("🔄 Existing session invalid, will create new connection");
+        this.connectedDevices.delete(deviceId);
+      }
+    }
+
     try {
       // Find the discovered device first
       console.log("📡 Getting available devices for connection...");
@@ -242,6 +264,39 @@ class LedgerService {
       return device;
     } catch (error: any) {
       console.error("❌ Device connection failed:", error);
+
+      // Handle "Device already opened" error by checking for existing connections
+      if (error.message && error.message.includes("Device already opened")) {
+        console.log(
+          "🔍 Device already opened, checking for existing connections..."
+        );
+
+        // Try to find the existing connection in our local cache
+        try {
+          for (const [cachedDeviceId, cachedDevice] of this.connectedDevices) {
+            if (cachedDeviceId === deviceId && cachedDevice.sessionId) {
+              try {
+                // Verify the session is still valid
+                const connectedDevice = this.dmk.getConnectedDevice({
+                  sessionId: cachedDevice.sessionId,
+                });
+                if (connectedDevice && connectedDevice.id === deviceId) {
+                  console.log(
+                    `✅ Found existing connection: ${cachedDevice.name}`
+                  );
+                  return cachedDevice;
+                }
+              } catch {
+                console.log("🔄 Cached session invalid, removing from cache");
+                this.connectedDevices.delete(cachedDeviceId);
+              }
+            }
+          }
+        } catch (findError) {
+          console.error("❌ Failed to find existing connection:", findError);
+        }
+      }
+
       throw new Error(
         `Failed to connect to Ledger device: ${error.message || error}`
       );
@@ -449,10 +504,31 @@ class LedgerService {
     }
 
     try {
+      if (this.dmk) {
+        console.log(
+          `🔌 Disconnecting device: ${device.name} (Session: ${device.sessionId})`
+        );
+        await this.dmk.disconnect({ sessionId: device.sessionId });
+      }
+
+      // Clean up local state
       this.connectedDevices.delete(deviceId);
+
+      // Reset session if this was the current session
+      if (this.currentSessionId === device.sessionId) {
+        this.currentSessionId = null;
+        this.ethSigner = null;
+      }
+
       console.log(`✅ Disconnected from device: ${device.name}`);
     } catch (error) {
       console.error("❌ Failed to disconnect device:", error);
+      // Clean up local state anyway
+      this.connectedDevices.delete(deviceId);
+      if (this.currentSessionId === device.sessionId) {
+        this.currentSessionId = null;
+        this.ethSigner = null;
+      }
     }
   }
 

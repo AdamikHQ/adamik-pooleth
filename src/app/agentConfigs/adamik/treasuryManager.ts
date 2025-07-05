@@ -346,7 +346,7 @@ const treasuryStrategies: Record<string, any> = {
     params: { recommendationId: string; recommendation?: any },
     userContext: any
   ) => {
-    const { recommendationId, recommendation } = params;
+    const { recommendation } = params;
 
     try {
       // If no recommendation object provided, return helpful message
@@ -429,7 +429,8 @@ const treasuryStrategies: Record<string, any> = {
   },
 
   // Execute bridge and stake strategy
-  executeBridgeAndStake: async (recommendation: any, userContext: any) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  executeBridgeAndStake: async (recommendation: any, _userContext: any) => {
     console.log("🌉 Executing bridge and stake strategy...");
 
     // This would involve:

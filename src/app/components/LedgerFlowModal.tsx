@@ -462,8 +462,8 @@ export function LedgerFlowModal({
       case "open-app":
         return (
           <div className="mt-2 p-2 bg-amber-50 rounded text-xs text-amber-700">
-            <strong>On your Ledger:</strong> Find "Ethereum" app and press both
-            buttons to open it
+            <strong>On your Ledger:</strong> Find &quot;Ethereum&quot; app and
+            press both buttons to open it
           </div>
         );
       case "get-address":
