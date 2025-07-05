@@ -496,6 +496,85 @@ const chatAgent: AgentConfig = {
 };
 ```
 
+## 🔒 Ledger Hardware Wallet Agent
+
+### Overview
+
+The Ledger Hardware Wallet Agent provides secure fund management by transferring cryptocurrency from Privy hot wallets to Ledger hardware wallets for cold storage. This agent focuses on **fund security** rather than complex transaction signing, leveraging the existing Privy transaction system.
+
+### Key Features
+
+- **Device Discovery**: Automatically discover connected Ledger devices via WebHID
+- **Secure Connection**: Establish secure communication with Ledger hardware wallets
+- **Address Retrieval**: Get Ethereum addresses from connected Ledger devices
+- **Fund Security**: Transfer funds from hot wallet to cold storage with one voice command
+- **User Guidance**: Step-by-step assistance for hardware wallet operations
+
+### Voice Commands
+
+- **"Secure my funds on Ledger"** - Primary command to transfer funds to hardware wallet
+- **"Transfer funds to my hardware wallet"** - Alternative phrasing for fund security
+- **"Move my crypto to cold storage"** - Another way to request fund transfer
+- **"Connect to my Ledger device"** - Connect to hardware wallet
+- **"Show my Ledger address"** - Display hardware wallet address
+- **"Find my Ledger device"** - Discover connected devices
+
+### Fund Security Flow
+
+The Ledger agent implements a **Hot Wallet → Cold Storage** security flow:
+
+```mermaid
+graph LR
+    A[🎤 "Secure my funds"] --> B[🔍 Discover Ledger]
+    B --> C[📱 Connect Device]
+    C --> D[📍 Get ETH Address]
+    D --> E[💰 Calculate Amount]
+    E --> F[✍️ Privy Signs TX]
+    F --> G[📡 Send to Ledger]
+    G --> H[🔒 Funds Secured]
+
+    style B fill:#e1f5fe
+    style D fill:#fff3e0
+    style F fill:#f3e5f5
+    style H fill:#e8f5e8
+```
+
+### Usage Example
+
+1. **User**: _"Secure my funds on Ledger"_
+2. **Agent**: _"I'll help you transfer your funds to your Ledger hardware wallet for enhanced security. Please ensure your Ledger device is connected and unlocked."_
+3. **System**: Discovers and connects to Ledger device
+4. **Agent**: _"Connected to your Nano X. Opening the Ethereum app and retrieving your secure address..."_
+5. **System**: Gets Ethereum address from Ledger device
+6. **Agent**: _"Your Ledger address is 0x1234...5678. I'll now transfer your available funds from your Privy wallet. Please confirm the transaction."_
+7. **System**: Uses existing Privy transaction system to send funds to Ledger address
+8. **Agent**: _"Transfer complete! Your funds are now secured on your Ledger hardware wallet."_
+
+### Prerequisites
+
+- **Chrome/Edge Browser**: WebHID support required
+- **Ledger Device**: Nano S Plus, Nano X, or compatible device
+- **Device Setup**: Device unlocked with Ethereum app open
+- **USB Connection**: Device connected via USB cable
+- **App Settings**: "Allow external access" enabled in Ethereum app
+
+### Security Benefits
+
+- **Cold Storage**: Private keys never leave the hardware device
+- **Enhanced Security**: Protection against online threats and malware
+- **User Control**: Physical confirmation required for all operations
+- **Backup Protection**: Hardware wallet recovery phrases provide ultimate security
+- **Professional Grade**: Same security used by institutions and crypto professionals
+
+### Configuration
+
+The Ledger agent is configured in `src/app/agentConfigs/ledger/`:
+
+- **Main Agent** (`index.ts`): Voice interface and user communication
+- **Supervisor Agent** (`supervisorAgent.ts`): Device operations and fund security logic
+- **Service Layer** (`src/app/services/ledger.ts`): Hardware wallet communication
+- **Tool Schemas** (`schemas.ts`): Type definitions for agent operations
+
 ### Available Tools
 
 **Wallet Operations**:
