@@ -1,6 +1,6 @@
 # Testing Guide for Adamik Agent
 
-This guide explains how to test the Adamik agent functionality without using the voice interface.
+This guide explains how to test the unified Adamik agent functionality, including Ledger hardware wallet integration and UI features, both with and without the voice interface.
 
 ## Chain Filtering Behavior
 
@@ -376,7 +376,7 @@ done
 
 ### Scenario 4: Voice Agent Chain Validation
 
-Since voice agents only accept predefined chains, test the enum validation:
+Since the unified Adamik voice agent only accepts predefined chains, test the enum validation:
 
 ```bash
 # This should work (chain in chains.ts)
@@ -505,10 +505,119 @@ curl -X POST "http://localhost:3000/api/wallet" \
 
 ## Integration with Agent Tools
 
-These same endpoints are used by the Adamik agent tools:
+These same endpoints are used by the unified Adamik agent tools:
 
 - `getPubKey` tool → `/api/wallet` with action `getPubKey`
 - `getAddress` tool → `/api/wallet` with action `getAddress`
 - `requestUserSignature` tool → `/api/wallet` with action `requestUserSignature`
+- `connectToLedgerHardwareWallet` tool → Ledger service integration with modal interface
 
 By testing these endpoints directly, you're validating the same code paths the voice agent uses.
+
+## Testing UI Enhancements
+
+### Header Wallet Indicators
+
+The application now includes enhanced header UI with wallet status indicators:
+
+#### Features to Test:
+
+1. **Privy Wallet Display**:
+
+   - Privy logo appears next to wallet address
+   - Address is formatted with ellipsis (e.g., `0x1234...5678`)
+   - Copy button works for full address
+   - Hover states and transitions
+
+2. **Ledger Connection Indicator**:
+   - Only appears when Ledger is successfully connected
+   - Shows Ledger horizontal logo with green connection dot
+   - Displays device name (e.g., "Ledger Nano S")
+   - Shows truncated Ledger address with copy functionality
+
+#### Manual UI Testing Steps:
+
+```bash
+# 1. Test initial state (only Privy should show)
+# Visit: http://localhost:3000
+# Expected: Only Privy wallet indicator visible in header
+
+# 2. Test Ledger connection flow
+# Say: "Connect to my hardware wallet"
+# Expected: Ledger modal appears → device connection → address retrieved → header shows Ledger indicator
+
+# 3. Test copy functionality
+# Click copy buttons for both Privy and Ledger addresses
+# Expected: Addresses copied to clipboard, button shows "✓" feedback
+
+# 4. Test visual alignment
+# Check that both wallet indicators are properly aligned
+# Expected: Consistent spacing, typography, and visual hierarchy
+
+# 5. Test responsive behavior
+# Resize browser window
+# Expected: Indicators remain properly aligned and readable
+```
+
+#### Automated UI Testing:
+
+```bash
+# Test Ledger connection state management
+curl -X POST "http://localhost:3000/api/wallet" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "action": "testLedgerConnection",
+    "userId": "your_user_id"
+  }'
+
+# Verify header state updates correctly based on connection status
+```
+
+### Ledger Modal Interface Testing
+
+#### Modal Flow Testing:
+
+1. **Device Discovery**: Modal shows 4-step progress
+2. **Connection States**: Proper error handling and retry options
+3. **Visual Feedback**: Progress bar, status colors, loading animations
+4. **Error Scenarios**: Graceful handling of device not found, app closed, etc.
+5. **Success Flow**: Auto-close after successful connection
+
+#### Voice Command Testing:
+
+Test these consolidated Ledger commands in the unified Adamik agent:
+
+- **"Connect to my hardware wallet"** → Triggers `connectToLedgerHardwareWallet`
+- **"Secure my funds on Ledger"** → Uses `secureFundsToLedger` with existing transfer system
+- **"Check my balance, then secure it on my Ledger"** → Unified conversation flow
+
+### Testing Agent Consolidation
+
+The system now uses a **single unified Adamik agent** instead of separate agents:
+
+#### Voice Agent Testing:
+
+```bash
+# Test unified agent functionality
+# All commands work in single conversation context:
+
+# 1. Blockchain queries
+"Check my ETH balance"
+
+# 2. Ledger operations
+"Connect to my hardware wallet"
+
+# 3. Fund transfers
+"Send 0.1 ETH to my Ledger address"
+
+# 4. Combined workflows
+"Check my balance, then secure half of it on my Ledger device"
+```
+
+#### Expected Behavior:
+
+- ✅ Single agent handles all operations
+- ✅ No context switching between agents
+- ✅ Seamless conversation flow
+- ✅ Unified tool execution
+- ✅ Consistent personality and responses

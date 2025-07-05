@@ -20,6 +20,9 @@ A sophisticated voice-enabled blockchain assistant powered by OpenAI's Realtime 
 - **Real-time Logs**: Comprehensive event logging with beautiful UI
 - **Smooth Animations**: Micro-interactions and transitions for better UX
 - **Accessibility**: Focus management and keyboard navigation support
+- **Smart Header Indicators**: Privy and Ledger wallet status with branded logos
+- **Connection Status**: Real-time hardware wallet connection indicator with green dot
+- **Unified Wallet Display**: Ellipsis-formatted addresses with one-click copy functionality
 
 ### 🔐 Security & Wallet Management
 
@@ -85,14 +88,14 @@ graph TD
 
 #### 1. Agent Layer
 
-**Adamik Agent Configuration** (`src/app/agentConfigs/adamik/`)
+**Unified Adamik Agent Configuration** (`src/app/agentConfigs/adamik/`)
 
-- **Purpose**: Defines the blockchain assistant's personality, capabilities, and available tools
+- **Purpose**: Defines the comprehensive blockchain assistant with integrated Ledger hardware wallet support
 - **Key Files**:
-  - `index.ts`: Main agent configuration with instructions and tool definitions
-  - `chains.ts`: Supported blockchain networks
+  - `index.ts`: Main agent configuration with instructions and unified tool definitions
+  - `chains.ts`: Supported blockchain networks for both Privy and Ledger operations
   - `schemas.ts`: TypeScript schemas for API interactions
-  - `supervisorAgent.ts`: Agent oversight and routing logic
+  - `supervisorAgent.ts`: Unified agent logic with blockchain queries, wallet operations, and Ledger integration
 
 #### 2. API Layer
 
@@ -496,11 +499,11 @@ const chatAgent: AgentConfig = {
 };
 ```
 
-## 🔒 Ledger Hardware Wallet Agent
+## 🔒 Ledger Hardware Wallet Integration
 
 ### Overview
 
-The Ledger Hardware Wallet Agent provides secure fund management by transferring cryptocurrency from Privy hot wallets to Ledger hardware wallets for cold storage. This agent focuses on **fund security** rather than complex transaction signing, leveraging the existing Privy transaction system.
+The Adamik agent now includes comprehensive Ledger hardware wallet integration, providing secure fund management by transferring cryptocurrency from Privy hot wallets to Ledger hardware wallets for cold storage. This integration focuses on **fund security** rather than complex transaction signing, leveraging the existing Privy transaction system and providing a unified voice interface.
 
 ### Key Features
 
@@ -566,14 +569,30 @@ graph LR
 - **Backup Protection**: Hardware wallet recovery phrases provide ultimate security
 - **Professional Grade**: Same security used by institutions and crypto professionals
 
+### Technical Implementation
+
+**Promise Resolution System**:
+
+- Robust promise chain between voice agent and Ledger modal interface
+- Proper cleanup of timeouts and global promise handlers
+- Session-based connection state management with automatic cleanup
+- Fixed critical timing issues in agent-to-modal communication
+
+**Modal Interface**:
+
+- 4-step visual progress flow with real-time feedback
+- Comprehensive error handling with specific retry options
+- Device state detection and smart flow optimization
+- Auto-close functionality after successful operations
+
 ### Configuration
 
-The Ledger agent is configured in `src/app/agentConfigs/ledger/`:
+The Ledger integration is configured within the unified Adamik agent in `src/app/agentConfigs/adamik/`:
 
-- **Main Agent** (`index.ts`): Voice interface and user communication
-- **Supervisor Agent** (`supervisorAgent.ts`): Device operations and fund security logic
-- **Service Layer** (`src/app/services/ledger.ts`): Hardware wallet communication
-- **Tool Schemas** (`schemas.ts`): Type definitions for agent operations
+- **Main Agent** (`index.ts`): Voice interface with Ledger instructions and user communication
+- **Supervisor Agent** (`supervisorAgent.ts`): Unified device operations, blockchain queries, and fund security logic
+- **Service Layer** (`src/app/services/ledger.ts`): Hardware wallet communication via DMK
+- **Tool Integration**: `connectToLedgerHardwareWallet` tool provides complete Ledger workflow
 
 ### Available Tools
 
@@ -584,7 +603,12 @@ The Ledger agent is configured in `src/app/agentConfigs/ledger/`:
 - `listWallets`: List all embedded wallets across different blockchains
 - `createWallet`: Create new embedded wallets for specific blockchain networks
 - `requestUserSignature`: Send EVM transactions using Privy's built-in modal
-- **NEW** `sendTokenTransfer`: Send ERC-20 token transfers using Privy's built-in transaction support
+- `sendTokenTransfer`: Send ERC-20 token transfers using Privy's built-in transaction support
+
+**Ledger Hardware Wallet**:
+
+- `connectToLedgerHardwareWallet`: Complete Ledger device connection workflow with modal interface
+- `secureFundsToLedger`: Transfer funds from Privy hot wallet to Ledger cold storage
 
 **Blockchain Queries**:
 
