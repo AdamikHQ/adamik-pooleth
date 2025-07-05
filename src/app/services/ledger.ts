@@ -4,10 +4,10 @@ import {
   type DeviceSessionId,
   type DeviceModelId,
   type DiscoveredDevice,
-  type ConnectedDevice,
   OpenAppDeviceAction,
   type ConnectionType,
   ConsoleLogger,
+  DeviceActionStatus,
 } from "@ledgerhq/device-management-kit";
 import { webHidTransportFactory } from "@ledgerhq/device-transport-kit-web-hid";
 import { webBleTransportFactory } from "@ledgerhq/device-transport-kit-web-ble";
@@ -90,7 +90,7 @@ class LedgerService {
 
     return new Promise((resolve, reject) => {
       let resolved = false;
-      let subscription: any = undefined;
+      let subscription: any;
 
       const finish = (devices: LedgerDevice[] | null, error?: any) => {
         if (!resolved) {
@@ -104,7 +104,6 @@ class LedgerService {
         }
       };
 
-      // Define observer first
       const observer = {
         next: (discoveredDevices: DiscoveredDevice[]) => {
           console.log(
@@ -128,7 +127,6 @@ class LedgerService {
         },
       };
 
-      // Assign subscription after observer is defined
       subscription = this.dmk!.listenToAvailableDevices({}).subscribe(observer);
 
       setTimeout(() => {
@@ -154,14 +152,19 @@ class LedgerService {
 
       const devices = await new Promise<DiscoveredDevice[]>(
         (resolve, reject) => {
-          const subscription = this.dmk!.listenToAvailableDevices({}).subscribe(
-            {
-              next: (devices) => {
-                subscription.unsubscribe();
-                resolve(devices);
-              },
-              error: reject,
-            }
+          let subscription: any;
+          const observer = {
+            next: (devices: DiscoveredDevice[]) => {
+              if (subscription) subscription.unsubscribe();
+              resolve(devices);
+            },
+            error: (error: any) => {
+              if (subscription) subscription.unsubscribe();
+              reject(error);
+            },
+          };
+          subscription = this.dmk!.listenToAvailableDevices({}).subscribe(
+            observer
           );
         }
       );
@@ -266,27 +269,47 @@ class LedgerService {
 
     try {
       // Use the Ethereum signer to get the address
-      const result = await this.ethSigner.getAddress(derivationPath, {
+      const result = this.ethSigner.getAddress(derivationPath, {
         checkOnDevice: verify,
         returnChainCode: true,
         skipOpenApp: true, // App should already be open
       });
 
-      console.log(`✅ Retrieved Ethereum address`);
+      // Wait for the completed state by subscribing to the observable
+      return new Promise((resolve, reject) => {
+        const subscription = result.observable.subscribe({
+          next: (state) => {
+            console.log("Ledger getAddress state:", state);
 
-      console.log(`✅ Retrieved Ethereum address successfully`);
-      console.log("Raw result:", result);
+            if (state.status === DeviceActionStatus.Completed) {
+              const output = state.output;
+              console.log("Ledger getAddress completed with output:", output);
 
-      // Handle the result based on the actual Device Management Kit structure
-      // Use type assertion to handle the unknown return structure
-      const resultData = result as any;
-
-      return {
-        address: resultData.address || resultData.ethereumAddress || "",
-        publicKey: resultData.publicKey || "",
-        derivationPath,
-        chainCode: resultData.chainCode || "",
-      };
+              subscription.unsubscribe();
+              resolve({
+                address: output.address || "",
+                publicKey: output.publicKey || "",
+                derivationPath,
+                chainCode: output.chainCode || "",
+              });
+            } else if (state.status === DeviceActionStatus.Error) {
+              console.error("Ledger getAddress error:", state.error);
+              subscription.unsubscribe();
+              reject(new Error(`Device action failed: ${state.error}`));
+            }
+            // For Pending states, we just log and continue waiting
+          },
+          error: (error) => {
+            console.error("Ledger getAddress observable error:", error);
+            subscription.unsubscribe();
+            reject(error);
+          },
+          complete: () => {
+            console.log("Ledger getAddress observable completed");
+            subscription.unsubscribe();
+          },
+        });
+      });
     } catch (error) {
       console.error("❌ Failed to get Ethereum address:", error);
       throw new Error("Failed to retrieve Ethereum address from Ledger device");

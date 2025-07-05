@@ -124,8 +124,17 @@ export default function TestLedgerPage() {
       );
 
       setAddress(addressInfo);
-      addLog(`Address retrieved: ${addressInfo.address}`, "success");
-      addLog(`Public Key: ${addressInfo.publicKey.substring(0, 20)}...`);
+      addLog(`Raw addressInfo: ${JSON.stringify(addressInfo)}`);
+      addLog(
+        `Address retrieved: ${
+          addressInfo.address ||
+          (addressInfo as any)?.ethereumAddress ||
+          "[not found]"
+        }`,
+        "success"
+      );
+      addLog(`Public Key: ${addressInfo.publicKey || "[not found]"}`);
+      addLog(`Chain Code: ${addressInfo.chainCode || "[not found]"}`);
       addLog(`Derivation Path: ${addressInfo.derivationPath}`);
     } catch (error: any) {
       addLog(`Address retrieval failed: ${error.message}`, "error");
@@ -238,64 +247,72 @@ export default function TestLedgerPage() {
             </div>
           </div>
 
-          {devices.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-medium">Found Devices:</h3>
-              {devices.map((device) => (
-                <button
-                  key={device.id}
-                  onClick={() => testConnectDevice(device.id)}
-                  className="w-full py-2 px-4 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400 text-sm"
-                  disabled={isLoading}
-                >
-                  3. Connect to {device.name}
-                </button>
-              ))}
+          {/* Device Actions */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+              📱 Device Actions
+            </h2>
+            <div className="space-y-4">
+              {devices.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-medium text-gray-700">Found Devices:</h3>
+                  {devices.map((device) => (
+                    <button
+                      key={device.id}
+                      onClick={() => testConnectDevice(device.id)}
+                      className="w-full py-3 px-6 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg hover:from-purple-600 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-md font-medium"
+                      disabled={isLoading}
+                    >
+                      🔗 3. Connect to {device.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {connectedDevice && (
+                <>
+                  <button
+                    onClick={testOpenEthereumApp}
+                    className="w-full py-3 px-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-md font-medium"
+                    disabled={isLoading}
+                  >
+                    📱 4. Open Ethereum App
+                  </button>
+
+                  <button
+                    onClick={() => testGetAddress(false)}
+                    className="w-full py-3 px-6 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-lg hover:from-indigo-600 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-md font-medium"
+                    disabled={isLoading}
+                  >
+                    📍 5. Get Address (No Verify)
+                  </button>
+
+                  <button
+                    onClick={() => testGetAddress(true)}
+                    className="w-full py-3 px-6 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-lg hover:from-indigo-700 hover:to-indigo-800 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-md font-medium"
+                    disabled={isLoading}
+                  >
+                    ✅ 5. Get Address (Verify on Device)
+                  </button>
+
+                  <button
+                    onClick={testDisconnectDevice}
+                    className="w-full py-3 px-6 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 disabled:from-gray-400 disabled:to-gray-500 transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100 shadow-md font-medium"
+                    disabled={isLoading}
+                  >
+                    🔌 6. Disconnect Device
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={clearLog}
+                className="w-full py-3 px-6 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-lg hover:from-gray-600 hover:to-gray-700 transition-all duration-200 transform hover:scale-105 shadow-md font-medium"
+              >
+                🗑️ Clear Log
+              </button>
             </div>
-          )}
-
-          {connectedDevice && (
-            <>
-              <button
-                onClick={testOpenEthereumApp}
-                className="w-full py-2 px-4 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:bg-gray-400"
-                disabled={isLoading}
-              >
-                4. Open Ethereum App
-              </button>
-
-              <button
-                onClick={() => testGetAddress(false)}
-                className="w-full py-2 px-4 bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:bg-gray-400"
-                disabled={isLoading}
-              >
-                5. Get Address (No Verify)
-              </button>
-
-              <button
-                onClick={() => testGetAddress(true)}
-                className="w-full py-2 px-4 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400"
-                disabled={isLoading}
-              >
-                5. Get Address (Verify on Device)
-              </button>
-
-              <button
-                onClick={testDisconnectDevice}
-                className="w-full py-2 px-4 bg-red-500 text-white rounded hover:bg-red-600 disabled:bg-gray-400"
-                disabled={isLoading}
-              >
-                6. Disconnect Device
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={clearLog}
-            className="w-full py-2 px-4 bg-gray-500 text-white rounded hover:bg-gray-600"
-          >
-            Clear Log
-          </button>
+          </div>
         </div>
 
         {/* Status Display */}
@@ -315,8 +332,21 @@ export default function TestLedgerPage() {
           {address && (
             <div className="p-3 bg-blue-50 border border-blue-200 rounded">
               <h3 className="font-medium">Retrieved Address:</h3>
-              <p className="text-xs break-all">{address.address}</p>
+              <p className="text-xs break-all">
+                {address.address ||
+                  (address as any)?.ethereumAddress ||
+                  "[not found]"}
+              </p>
+              <p className="text-xs">
+                Public Key: {address.publicKey || "[not found]"}
+              </p>
+              <p className="text-xs">
+                Chain Code: {address.chainCode || "[not found]"}
+              </p>
               <p className="text-xs">Path: {address.derivationPath}</p>
+              <pre className="text-xs mt-2 bg-gray-100 p-2 rounded">
+                {JSON.stringify(address, null, 2)}
+              </pre>
             </div>
           )}
 
@@ -326,23 +356,23 @@ export default function TestLedgerPage() {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Log Output */}
-      <div className="mt-6">
-        <h2 className="text-xl font-semibold mb-3">📋 Test Log</h2>
-        <div className="bg-gray-900 text-green-400 p-4 rounded-lg h-96 overflow-y-auto font-mono text-sm">
-          {log.length === 0 ? (
-            <p className="text-gray-500">
-              Click "Test WebHID Support" to start testing...
-            </p>
-          ) : (
-            log.map((entry, index) => (
-              <div key={index} className="mb-1">
-                {entry}
-              </div>
-            ))
-          )}
+        {/* Log Output */}
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">📋 Test Log</h2>
+          <div className="bg-gray-900 text-green-400 p-6 rounded-xl h-96 overflow-y-auto font-mono text-sm shadow-lg">
+            {log.length === 0 ? (
+              <p className="text-gray-500">
+                Click &quot;Test WebHID Support&quot; to start testing...
+              </p>
+            ) : (
+              log.map((entry, index) => (
+                <div key={index} className="mb-1">
+                  {entry}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
