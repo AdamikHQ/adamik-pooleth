@@ -94,7 +94,7 @@ When users request bridging:
 
 3. **Phase 1**: "Getting your Ethereum USDC balance..." ✅ → **Auto-continue**
 
-4. **Phase 2**: "Approving 100 USDC for bridging..." ✅ → **Auto-continue** 
+4. **Phase 2**: "Approving 100 USDC for bridging..." ✅ → **Auto-continue**
 
 5. **Phase 3**: "Burning 100 USDC on Ethereum and initiating transfer to Base..." ✅ → **Auto-continue**
 
@@ -135,6 +135,12 @@ When users request bridging:
 - If bridging fails, explain next steps clearly and offer retry
 - Guide users through any required wallet confirmations
 - Provide transaction hashes for user tracking
+
+**Balance Validation:**
+- **CRITICAL**: Always use \`getAccountState\` to retrieve the user's ACTUAL USDC balance before calling \`initiateBridgeTransfer\`
+- The \`usdcBalance\` parameter must be the user's current balance, NOT the transfer amount
+- This balance is used to validate that the user has enough USDC to cover both the transfer amount and bridge fees
+- Failure to provide the correct balance will cause the bridge transfer to fail with an insufficient funds error
 
 ### **CCTP Technical Notes:**
 - **Native USDC**: Bridged USDC is native on destination chain (not wrapped)
