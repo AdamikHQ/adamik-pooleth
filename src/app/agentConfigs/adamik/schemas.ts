@@ -1,11 +1,7 @@
 import { z } from "zod";
 
-// Component Schemas
-
-// ChainId
 export const ChainIdSchema = z.string();
 
-// ChainSupportedFeatures
 export const ChainSupportedFeaturesReadTransactionSchema = z.object({
   native: z.boolean(),
   tokens: z.boolean(),
@@ -72,7 +68,6 @@ export const ChainSupportedFeaturesSchema = z.object({
   utils: ChainSupportedFeaturesUtilsSchema,
 });
 
-// SignerSpec
 export const SignerSpecCurveSchema = z.enum(["secp256k1", "ed25519", "stark"]);
 
 export const SignerSpecHashFunctionSchema = z.enum(["sha256", "keccak256", "sha512_256", "pedersen", "none"]);
@@ -86,7 +81,6 @@ export const SignerSpecSchema = z.object({
   coinType: z.string(),
 });
 
-// ChainFamily
 export const ChainFamilySchema = z.enum([
   "aptos",
   "algorand",
@@ -98,7 +92,6 @@ export const ChainFamilySchema = z.enum([
   "starknet",
 ]);
 
-// ChainDetail
 export const ChainDetailSchema = z.object({
   family: ChainFamilySchema,
   id: ChainIdSchema,
@@ -111,9 +104,7 @@ export const ChainDetailSchema = z.object({
   signerSpec: SignerSpecSchema,
 });
 
-// Paths
 
-// GET /api/chains
 export const GetSupportedChainsResponseSchema = z.object({
   chains: z.record(z.string(), ChainDetailSchema),
 });
@@ -123,7 +114,6 @@ export const GetChainDetailsResponseSchema = z.object({
 });
 export type GetChainDetailsResponse = z.infer<typeof GetChainDetailsResponseSchema>;
 
-// GET /api/{chainId}/token/{tokenId}
 export const TokenTypeSchema = z.enum(["TRC10", "TRC20", "ASA", "ERC20", "IBC", "JETTON", "APTOS_COIN"]);
 
 export const TokenInfoSchema = z.object({
@@ -140,7 +130,6 @@ export const GetTokenDetailsResponseSchema = z.object({
 });
 export type GetTokenDetailsResponse = z.infer<typeof GetTokenDetailsResponseSchema>;
 
-// GET /api/{chainId}/validators
 export const ValidatorSchema = z.object({
   address: z.string(),
   name: z.string(),
@@ -169,7 +158,6 @@ export const GetChainValidatorsResponseSchema = z.object({
 });
 export type GetChainValidatorsResponse = z.infer<typeof GetChainValidatorsResponseSchema>;
 
-// GET /api/{chainId}/transaction/{transactionId}
 export const TransactionModeSchema = z.enum([
   "deployAccount",
   "transfer",
@@ -249,7 +237,6 @@ export const GetTransactionDetailsResponseSchema = z.object({
 });
 export type GetTransactionDetailsResponse = z.infer<typeof GetTransactionDetailsResponseSchema>;
 
-// POST /api/{chainId}/address/encode
 export const PubkeyToAddressPathParamsSchema = z.object({
   chainId: ChainIdSchema,
 });
@@ -272,7 +259,6 @@ export const PubkeyToAddressResponseSchema = z.object({
 });
 export type PubkeyToAddressResponse = z.infer<typeof PubkeyToAddressResponseSchema>;
 
-// GET /api/{chainId}/account/{accountId}/state
 export const GetAccountStatePathParamsSchema = z.object({
   chainId: ChainIdSchema,
   accountId: z.string(),
@@ -345,7 +331,6 @@ export const GetAccountStateResponseSchema = z.object({
 });
 export type GetAccountStateResponse = z.infer<typeof GetAccountStateResponseSchema>;
 
-// GET /api/{chainId}/account/{accountId}/history
 export const GetAccountHistoryPathParamsSchema = z.object({
   chainId: ChainIdSchema,
   accountId: z.string(),
@@ -366,14 +351,10 @@ export const GetAccountHistoryResponseSchema = z.object({
 });
 export type GetAccountHistoryResponse = z.infer<typeof GetAccountHistoryResponseSchema>;
 
-// Transaction Encoding / Validation / Broadcast Related Schemas
-
-// Base Transaction Data for Requests
 export const BaseTransactionDataRequestSchema = z.object({
   memo: z.string().optional(),
 });
 
-// Base Transaction Data completed by API in Encode Response
 export const CompletedBaseTransactionDataSchema = z.object({
   fees: z.string(),
   gas: z.string().optional(),
@@ -382,14 +363,12 @@ export const CompletedBaseTransactionDataSchema = z.object({
   params: z.record(z.string(), z.any()).optional(),
 });
 
-// Mode-specific Transaction Data Schemas
 export const DeployAccountTxDataSchema = z.object({
   mode: z.literal("deployAccount"),
   senderPubKey: z.string(),
   contractType: z.literal("argentx").default("argentx").optional(),
 });
 
-// Transfer (Properties for union, Refined for standalone export)
 const TransferTxDataPropertiesSchema = z.object({
   mode: z.literal("transfer"),
   senderAddress: z.string(),
@@ -399,7 +378,6 @@ const TransferTxDataPropertiesSchema = z.object({
   useMaxAmount: z.boolean().default(false).optional(),
 });
 
-// TransferToken (Properties for union, Refined for standalone export)
 const TransferTokenTxDataPropertiesSchema = z.object({
   mode: z.literal("transferToken"),
   tokenId: z.string(),
@@ -410,7 +388,6 @@ const TransferTokenTxDataPropertiesSchema = z.object({
   useMaxAmount: z.boolean().default(false).optional(),
 });
 
-// Stake (Properties for union, Refined for standalone export)
 const StakeTxDataPropertiesSchema = z.object({
   mode: z.literal("stake"),
   senderAddress: z.string(),
@@ -421,7 +398,6 @@ const StakeTxDataPropertiesSchema = z.object({
   useMaxAmount: z.boolean().default(false).optional(),
 });
 
-// Unstake (Properties for union, Refined for standalone export)
 const UnstakeTxDataPropertiesSchema = z.object({
   mode: z.literal("unstake"),
   senderAddress: z.string(),
@@ -482,7 +458,6 @@ export const ConvertAssetTxDataRequestSchema = z.object({
   slippage: z.number().min(0).max(1).optional(),
 });
 
-// ConvertAsset (for transaction encoding responses)
 export const ConvertAssetTxDataResponseSchema = z.object({
   mode: z.literal("convertAsset"),
   from: z.object({
@@ -500,7 +475,6 @@ export const ConvertAssetTxDataResponseSchema = z.object({
   slippage: z.number().min(0).max(1).optional(),
 });
 
-// Discriminated Union for request data (uses unrefined properties schemas for relevant modes)
 const DiscriminatedTransactionModeRequestDataSchema = z.discriminatedUnion("mode", [
   DeployAccountTxDataSchema,
   TransferTxDataPropertiesSchema,
@@ -513,7 +487,6 @@ const DiscriminatedTransactionModeRequestDataSchema = z.discriminatedUnion("mode
   ConvertAssetTxDataRequestSchema,
 ]);
 
-// Combined Transaction Data for Encode Request
 export const EncodeTransactionRequestDataSchema = z
   .intersection(BaseTransactionDataRequestSchema, DiscriminatedTransactionModeRequestDataSchema)
   .superRefine((data, ctx) => {
@@ -539,7 +512,6 @@ export const EncodeTransactionRequestDataSchema = z
     }
   });
 
-// POST /api/{chainId}/transaction/encode
 export const EncodeTransactionPathParamsSchema = z.object({
   chainId: ChainIdSchema,
 });
@@ -552,12 +524,9 @@ export const EncodeTransactionRequestBodySchema = z.object({
 });
 export type EncodeTransactionRequestBody = z.infer<typeof EncodeTransactionRequestBodySchema>;
 
-// For response of transaction/encode
 export const EncodeTransactionResponseDataSchema = z.intersection(
   CompletedBaseTransactionDataSchema,
-  DiscriminatedTransactionModeRequestDataSchema // Re-uses the same discriminated union structure as request
-  // as the response 'data' includes the original mode fields
-  // along with completed base fields.
+  DiscriminatedTransactionModeRequestDataSchema
 );
 
 export const EncodedItemHashFormatSchema = z.enum(["sha256", "keccak256", "sha512_256", "pedersen"]);
@@ -603,15 +572,14 @@ export const EncodeTransactionResponseSchema = z.object({
 });
 export type EncodeTransactionResponse = z.infer<typeof EncodeTransactionResponseSchema>;
 
-// POST /api/{chainId}/transaction/broadcast
 export const BroadcastTransactionPathParamsSchema = z.object({
   chainId: ChainIdSchema,
 });
 export type BroadcastTransactionPathParams = z.infer<typeof BroadcastTransactionPathParamsSchema>;
 
 export const BroadcastTransactionRequestBodyTransactionSchema = z.object({
-  data: EncodeTransactionResponseDataSchema, // Data from encode response
-  encoded: z.array(EncodedItemSchema), // Encoded from encode response
+  data: EncodeTransactionResponseDataSchema,
+  encoded: z.array(EncodedItemSchema),
   signature: z.string(),
 });
 
