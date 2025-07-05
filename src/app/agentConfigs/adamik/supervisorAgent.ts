@@ -244,7 +244,8 @@ const toolLogic: Record<string, any> = {
     userContext?: { userId: string; walletAddress?: string }
   ) => {
     // Extract transaction parameters from the request
-    const { to, value, chainId, data, gasLimit, description } = params;
+    const { to, value, chainId, data, gasLimit, description, tokenDetails } =
+      params;
 
     // Validate required parameters
     if (!to) {
@@ -308,26 +309,124 @@ const toolLogic: Record<string, any> = {
       );
     }
 
-    // Prepare transaction request for Privy
-    const transactionRequest = {
-      to,
-      value: value.toString(), // Ensure string format for Privy
-      chainId,
-      ...(data && { data }),
-      ...(gasLimit && { gasLimit }),
-    };
+    try {
+      console.log("📝 Initiating transaction signature request...");
 
-    // Return a transaction request that the frontend will recognize
-    const response = {
-      type: "transaction_request",
-      data: transactionRequest,
-      message: `Transaction ready for sending. ${
-        description || "Please review and confirm the transaction."
-      }`,
-    };
+      // Check if trigger function exists
+      if (typeof (window as any).__triggerTransactionModal !== "function") {
+        console.error(
+          "❌ __triggerTransactionModal function not found on window object"
+        );
+        throw new Error(
+          "Transaction modal trigger function not available. Please refresh the page."
+        );
+      }
 
-    const text = JSON.stringify(response);
-    return { content: [{ type: "text", text }] };
+      console.log("✅ Found __triggerTransactionModal function, proceeding...");
+
+      // Prepare transaction data for the modal
+      const transactionData = {
+        to,
+        value: value.toString(), // Ensure string format for Privy
+        chainId,
+        ...(data && { data }),
+        ...(gasLimit && { gasLimit }),
+        ...(description && { description }),
+        ...(tokenDetails && { tokenDetails }),
+      };
+
+      // Trigger the modal flow and wait for result
+      const result = await new Promise<any>((resolve, reject) => {
+        // Store the promise resolvers globally so the modal can access them
+        const promiseId = Math.random().toString(36).substr(2, 9);
+        console.log(
+          `🆔 SUPERVISOR: Creating __transactionReviewPromise with ID: ${promiseId}`
+        );
+
+        const promiseData = {
+          resolve: (result: any) => {
+            console.log(
+              `✅ SUPERVISOR: Transaction promise ${promiseId} resolved with:`,
+              result
+            );
+            resolve(result);
+          },
+          reject: (error: any) => {
+            console.log(
+              `❌ SUPERVISOR: Transaction promise ${promiseId} rejected with:`,
+              error
+            );
+            reject(error);
+          },
+          id: promiseId,
+          timeoutId: null as any,
+        };
+
+        (window as any).__transactionReviewPromise = promiseData;
+        console.log(
+          "📋 SUPERVISOR: Transaction promise stored globally:",
+          promiseData
+        );
+
+        console.log("📞 SUPERVISOR: Calling __triggerTransactionModal()...");
+        // Trigger the modal to open
+        (window as any).__triggerTransactionModal?.(transactionData);
+
+        // Set a timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          console.warn(
+            `⏰ SUPERVISOR: Transaction signature timed out after 120 seconds for promise ${promiseId}`
+          );
+          console.log(
+            "🔍 SUPERVISOR: Current promise at timeout:",
+            (window as any).__transactionReviewPromise
+          );
+
+          // Clean up the global promise before rejecting
+          if ((window as any).__transactionReviewPromise?.id === promiseId) {
+            delete (window as any).__transactionReviewPromise;
+            console.log(
+              `🧹 SUPERVISOR: Cleaned up timed out transaction promise ${promiseId}`
+            );
+          } else {
+            console.warn(
+              `⚠️ SUPERVISOR: Transaction promise ${promiseId} not found or already replaced at timeout`
+            );
+          }
+
+          reject(
+            new Error("Transaction signature timed out after 120 seconds")
+          );
+        }, 120000);
+
+        // Store timeout ID for potential cleanup
+        promiseData.timeoutId = timeoutId;
+        console.log(
+          `⏰ SUPERVISOR: Timeout ${timeoutId} set for transaction promise ${promiseId}`
+        );
+      });
+
+      console.log("🎉 Received result from transaction modal:", result);
+
+      const response = {
+        success: true,
+        transactionHash: result.transactionHash,
+        details: result.details,
+        message: `Transaction completed successfully. Hash: ${result.transactionHash}`,
+      };
+
+      const text = JSON.stringify(response);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Transaction signature request failed:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Transaction signature request failed. Please try again.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
   },
 
   // NEW: Sends ERC-20 token transfers using Privy's built-in sendTransaction
@@ -337,12 +436,13 @@ const toolLogic: Record<string, any> = {
     userContext?: { userId: string; walletAddress?: string }
   ) => {
     // Extract token transfer parameters
-    const { tokenAddress, to, amount, chainId, description } = params;
+    const { tokenSymbol, to, amount, chainId, description, sourceAddress } =
+      params;
 
     // Validate required parameters
-    if (!tokenAddress) {
+    if (!tokenSymbol) {
       throw new Error(
-        "Missing 'tokenAddress' parameter - token contract address is required"
+        "Missing 'tokenSymbol' parameter - token symbol (e.g., 'USDC') is required"
       );
     }
 
@@ -356,6 +456,12 @@ const toolLogic: Record<string, any> = {
 
     if (!chainId) {
       throw new Error("Missing 'chainId' parameter - chain ID is required");
+    }
+
+    if (!sourceAddress) {
+      throw new Error(
+        "Missing 'sourceAddress' parameter - source wallet address is required"
+      );
     }
 
     // Ensure chainId is EVM compatible
@@ -406,9 +512,98 @@ const toolLogic: Record<string, any> = {
     }
 
     try {
-      console.log("🪙 Encoding ERC-20 transfer data directly...");
+      console.log(
+        `🔍 First fetching account state to find ${tokenSymbol} token details...`
+      );
 
-      // Generate ERC-20 transfer function call data
+      // Step 1: Get user's account state to find the actual token they own
+      const accountStateResult = await toolLogic.getAccountState(
+        {
+          chainId,
+          accountId: sourceAddress,
+        },
+        userContext
+      );
+
+      const accountData = JSON.parse(accountStateResult.content[0].text);
+
+      // Step 2: Find the token by symbol in user's holdings
+      const tokenDetails = accountData?.balances?.tokens?.find((token: any) => {
+        const ticker = token.token?.ticker?.toLowerCase();
+        const name = token.token?.name?.toLowerCase();
+        const searchSymbol = tokenSymbol.toLowerCase();
+
+        return ticker === searchSymbol || name === searchSymbol;
+      });
+
+      if (!tokenDetails) {
+        // List available tokens for better error message
+        const availableTokens =
+          accountData?.balances?.tokens
+            ?.map(
+              (token: any) =>
+                token.token?.ticker || token.token?.name || "Unknown"
+            )
+            .filter(Boolean) || [];
+
+        throw new Error(
+          `Token ${tokenSymbol} not found in user's wallet on ${chainId}. ` +
+            `Available tokens: ${
+              availableTokens.length > 0 ? availableTokens.join(", ") : "none"
+            }`
+        );
+      }
+
+      // Step 3: Extract token contract address and decimals from user's actual holdings
+      const tokenAddress = tokenDetails.token?.id;
+      const decimals =
+        tokenDetails.decimals || tokenDetails.token?.decimals || 18;
+      const tokenTicker =
+        tokenDetails.token?.ticker || tokenDetails.token?.name || tokenSymbol;
+
+      if (!tokenAddress) {
+        throw new Error(`Token contract address not found for ${tokenSymbol}`);
+      }
+
+      console.log(
+        `✅ Found ${tokenTicker} token: ${tokenAddress} (${decimals} decimals)`
+      );
+
+      // Step 4: Check if user has sufficient balance before proceeding
+      const userBalance = tokenDetails.amount || "0"; // Raw balance in token units
+      const formattedBalance =
+        tokenDetails.formattedAmount ||
+        (Number(userBalance) / Math.pow(10, decimals)).toFixed(6);
+
+      console.log(
+        `💰 User's ${tokenTicker} balance: ${formattedBalance} (${userBalance} raw units)`
+      );
+
+      // Convert requested amount to token units for comparison
+      const requestedAmount = parseFloat(amount);
+      const availableAmount = parseFloat(formattedBalance);
+
+      if (requestedAmount > availableAmount) {
+        throw new Error(
+          `Insufficient ${tokenTicker} balance. ` +
+            `Requested: ${requestedAmount} ${tokenTicker}, ` +
+            `Available: ${availableAmount} ${tokenTicker}. ` +
+            `Please check your balance and try again with a smaller amount.`
+        );
+      }
+
+      // Step 5: Convert human-readable amount to token units using correct decimals
+      const amountInTokenUnits = (
+        parseFloat(amount) * Math.pow(10, decimals)
+      ).toString();
+
+      console.log(
+        `💰 Converting ${amount} ${tokenTicker} to ${amountInTokenUnits} token units`
+      );
+
+      // Step 6: Generate ERC-20 transfer function call data
+      console.log("🪙 Encoding ERC-20 transfer data...");
+
       // Function signature: transfer(address,uint256)
       // Function selector: 0xa9059cbb (first 4 bytes of keccak256("transfer(address,uint256)"))
 
@@ -421,7 +616,7 @@ const toolLogic: Record<string, any> = {
       }
 
       // Convert amount to BigInt and then to hex (32 bytes, big-endian)
-      const amountBigInt = BigInt(amount);
+      const amountBigInt = BigInt(amountInTokenUnits);
       const amountHex = amountBigInt.toString(16).padStart(64, "0");
 
       // Construct the function call data
@@ -432,10 +627,10 @@ const toolLogic: Record<string, any> = {
       const transferData = `0x${functionSelector}${recipientPadded}${amountPadded}`;
 
       console.log("✅ ERC-20 transfer data encoded successfully");
-      console.log(`📋 Function: transfer(${to}, ${amount})`);
+      console.log(`📋 Function: transfer(${to}, ${amountInTokenUnits})`);
       console.log(`📋 Data length: ${transferData.length} characters`);
 
-      // Use Privy's requestUserSignature with the encoded token data
+      // Step 7: Use Privy's requestUserSignature with the encoded token data
       console.log("🔄 Preparing token transfer for user signature...");
 
       const signatureResult = await toolLogic.requestUserSignature(
@@ -444,7 +639,13 @@ const toolLogic: Record<string, any> = {
           value: "0", // No ETH value for token transfers
           chainId,
           data: transferData, // Include the encoded ERC-20 transfer data
-          description: description || `Send ${amount} tokens to ${to}`,
+          description: description || `Send ${amount} ${tokenTicker} to ${to}`,
+          tokenDetails: {
+            symbol: tokenTicker,
+            decimals: decimals,
+            formattedAmount: amount,
+            contractAddress: tokenAddress,
+          },
         },
         userContext
       );
@@ -582,13 +783,15 @@ const toolLogic: Record<string, any> = {
       to,
       amount,
       network = "ethereum",
-      tokenAddress,
+      tokenSymbol,
+      sourceAddress,
       description,
     }: {
       to: string;
       amount: string;
       network?: string;
-      tokenAddress?: string;
+      tokenSymbol?: string;
+      sourceAddress: string;
       description?: string;
     },
     userContext?: { userId: string }
@@ -600,16 +803,22 @@ const toolLogic: Record<string, any> = {
         throw new Error("User context required for asset transfer");
       }
 
+      if (!sourceAddress) {
+        throw new Error("Source address is required for asset transfer");
+      }
+
       let transferResult;
-      if (tokenAddress) {
-        // Token transfer
+      if (tokenSymbol) {
+        // Token transfer - use improved sendTokenTransfer
         transferResult = await toolLogic.sendTokenTransfer(
           {
-            tokenAddress,
+            tokenSymbol,
             to,
             amount,
             chainId: network,
-            description: description || `Transfer ${amount} tokens to ${to}`,
+            sourceAddress,
+            description:
+              description || `Transfer ${amount} ${tokenSymbol} to ${to}`,
           },
           userContext
         );
@@ -634,10 +843,11 @@ const toolLogic: Record<string, any> = {
         to,
         amount,
         network,
-        tokenAddress,
+        tokenSymbol,
+        sourceAddress,
         transferResult: transferData,
         message: `Asset transfer prepared. Ready to transfer ${
-          tokenAddress ? "tokens" : "native currency"
+          tokenSymbol ? `${amount} ${tokenSymbol}` : "native currency"
         } to ${to}`,
       };
 
@@ -784,19 +994,45 @@ const toolLogic: Record<string, any> = {
         )} ETH to Ledger hardware wallet`;
       }
 
-      // Step 4: Execute transfer using generic transferAssets function
+      // Step 4: Execute transfer directly to Ledger address
       console.log("✍️ Executing transfer to Ledger address...");
 
-      const transferResult = await toolLogic.transferAssets(
-        {
-          to: destinationAddress,
-          amount: transferAmount,
-          network,
-          tokenAddress,
-          description: friendlyDescription,
-        },
-        userContext
-      );
+      let transferResult;
+      if (tokenAddress) {
+        // Token transfer - call sendTokenTransfer directly
+        const tokenSymbol = tokenDetails
+          ? tokenDetails.token?.ticker || tokenDetails.token?.name
+          : "Unknown"; // fallback if token not found in account state
+
+        const formattedAmount =
+          tokenDetails?.formattedAmount ||
+          (
+            Number(transferAmount) / Math.pow(10, tokenDetails?.decimals || 18)
+          ).toFixed(6);
+
+        transferResult = await toolLogic.sendTokenTransfer(
+          {
+            tokenSymbol,
+            to: destinationAddress,
+            amount: formattedAmount,
+            chainId: network,
+            sourceAddress,
+            description: friendlyDescription,
+          },
+          userContext
+        );
+      } else {
+        // Native currency transfer - call requestUserSignature directly
+        transferResult = await toolLogic.requestUserSignature(
+          {
+            to: destinationAddress,
+            value: transferAmount,
+            chainId: network,
+            description: friendlyDescription,
+          },
+          userContext
+        );
+      }
 
       // Parse transfer result and enhance with Ledger-specific info
       const transferData = JSON.parse(transferResult.content[0].text);
@@ -838,7 +1074,7 @@ const toolLogic: Record<string, any> = {
             }
           : null,
         ledgerDevice: connectionData.deviceName,
-        transferResult: transferData.transferResult,
+        transferResult: transferData,
         message: enhancedMessage,
       };
 
@@ -1551,13 +1787,14 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "sendTokenTransfer",
     description:
-      "Sends a token transfer transaction using Privy's built-in sendTransaction. This handles encoding the token data and presenting the user with a signature request.",
+      "Sends a token transfer transaction using Privy's built-in sendTransaction. IMPORTANT: This function automatically fetches the user's account state first to find the token by symbol and get the correct contract address and decimals. No need to guess token addresses.",
     parameters: {
       type: "object",
       properties: {
-        tokenAddress: {
+        tokenSymbol: {
           type: "string",
-          description: "The contract address of the token to transfer",
+          description:
+            "The symbol of the token to transfer (e.g., 'USDC', 'DAI', 'WETH'). The function will look this up in the user's actual holdings.",
         },
         to: {
           type: "string",
@@ -1566,20 +1803,25 @@ export const toolDefinitions = [
         amount: {
           type: "string",
           description:
-            "The amount of tokens to transfer in smallest units (e.g., '1000000000000000000' for 1 token).",
+            "The amount of tokens to transfer in human-readable format (e.g., '0.001' for 0.001 USDC). The function will convert this to the correct token units automatically.",
         },
         chainId: {
           type: "string",
           description:
             "The EVM chain ID (e.g., 'ethereum', 'polygon', 'base', 'arbitrum')",
         },
+        sourceAddress: {
+          type: "string",
+          description:
+            "The source wallet address to transfer from (typically the user's Privy wallet address)",
+        },
         description: {
           type: "string",
           description:
-            "A human-readable description of what this token transfer will do (e.g., 'Send 100 tokens to Alice'). This will be shown to the user when they are asked to confirm.",
+            "A human-readable description of what this token transfer will do (e.g., 'Send 0.001 USDC to Alice'). This will be shown to the user when they are asked to confirm.",
         },
       },
-      required: ["tokenAddress", "to", "amount", "chainId", "description"],
+      required: ["tokenSymbol", "to", "amount", "chainId", "sourceAddress"],
       additionalProperties: false,
     },
   },
@@ -1587,7 +1829,7 @@ export const toolDefinitions = [
     type: "function" as const,
     name: "transferAssets",
     description:
-      "Generic asset transfer function that handles both native currency and token transfers. Use this for any transfer operation.",
+      "Generic asset transfer function that handles both native currency and token transfers. IMPORTANT: For token transfers, this automatically fetches the user's account state to find tokens by symbol. Use this for any transfer operation.",
     parameters: {
       type: "object",
       properties: {
@@ -1598,17 +1840,22 @@ export const toolDefinitions = [
         amount: {
           type: "string",
           description:
-            "The amount to transfer in smallest units (wei for native, token units for ERC-20)",
+            "The amount to transfer in human-readable format (e.g., '0.001' for 0.001 tokens or '0.001' ETH). For native transfers, this should be in wei.",
         },
         network: {
           type: "string",
           description:
             "The EVM chain ID (default: 'ethereum'). Supported: 'ethereum', 'polygon', 'base', 'arbitrum', etc.",
         },
-        tokenAddress: {
+        tokenSymbol: {
           type: "string",
           description:
-            "The contract address of the token to transfer (optional - leave empty for native currency transfer)",
+            "The symbol of the token to transfer (e.g., 'USDC', 'DAI'). Leave empty for native currency transfer. The function will find this token in the user's holdings automatically.",
+        },
+        sourceAddress: {
+          type: "string",
+          description:
+            "The source wallet address to transfer from (required for token transfers to fetch account state)",
         },
         description: {
           type: "string",
@@ -1616,7 +1863,7 @@ export const toolDefinitions = [
             "A human-readable description of the transfer (optional - will be auto-generated if not provided)",
         },
       },
-      required: ["to", "amount"],
+      required: ["to", "amount", "sourceAddress"],
       additionalProperties: false,
     },
   },

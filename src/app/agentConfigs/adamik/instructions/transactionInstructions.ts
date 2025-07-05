@@ -9,6 +9,20 @@ export const transactionInstructions = `
 - **EVM chains only**: Works with Ethereum, Polygon, Base, Arbitrum, etc.
 - **Secure and reliable**: Built-in security and user confirmation flow
 
+## Token Transfer Workflow (IMPORTANT)
+**ALWAYS fetch user account state BEFORE token transfers:**
+1. **NO GUESSING**: Never assume token contract addresses
+2. **USE SYMBOLS**: Always use token symbols like 'USDC', 'DAI', not contract addresses
+3. **AUTO-DISCOVERY**: sendTokenTransfer automatically finds tokens in user's holdings
+4. **CORRECT DECIMALS**: Function gets exact decimals from user's token data
+5. **HUMAN AMOUNTS**: Use decimal amounts like '0.001', not wei amounts
+
+**Example workflow:**
+- User: "Send 0.001 USDC to 0x123... on Arbitrum"
+- Agent: Calls sendTokenTransfer(tokenSymbol: "USDC", amount: "0.001", ...)
+- Function: Fetches account state → finds USDC with correct contract & decimals → converts amount → executes transfer
+- Result: Accurate transfer with correct token details in user confirmation modal
+
 ## Transaction Amounts in Smallest Units
 - **ALL transaction amounts MUST be specified in the blockchain's smallest unit**
 - **AMOUNTS MUST BE STRINGS, NOT NUMBERS** (e.g., "10000000", not 10000000)
@@ -37,10 +51,12 @@ When executing transactions, use this single-step process:
 - Transaction hash returned for confirmation
 
 ### Token Transfer (sendTokenTransfer)
-- Use for ERC-20 token transfers (USDC, USDT, etc.)
-- Convert decimal amounts to token's smallest unit (check token decimals)
-- Call sendTokenTransfer with token parameters
-- Privy shows modal with token details for user review
+- **IMPORTANT**: Use token symbols (e.g., 'USDC', 'DAI') - NOT contract addresses
+- **Automatic token lookup**: Function fetches user's account state to find tokens
+- **Automatic decimals**: Function gets correct decimals from user's holdings
+- **Human-readable amounts**: Use regular decimal amounts (e.g., '0.001' for 0.001 USDC)
+- Process: sendTokenTransfer fetches account → finds token → converts amount → executes transfer
+- Privy shows modal with correct token details for user review
 - User confirms → Privy automatically broadcasts the transaction
 - Transaction hash returned for confirmation
 
@@ -54,10 +70,11 @@ When executing transactions, use this single-step process:
 - Optional: data, gasLimit
 
 **Token Transfer (sendTokenTransfer):**
-- tokenAddress: Token contract address
+- tokenSymbol: Token symbol (e.g., "USDC", "DAI", "WETH") - NOT contract address
 - to: Recipient address
-- amount: Amount in token's smallest unit as string
+- amount: Amount in human-readable format (e.g., "0.001" for 0.001 USDC)
 - chainId: EVM chain (e.g., "ethereum", "polygon", "base")
+- sourceAddress: Source wallet address (user's Privy wallet)
 - description: Human-readable description for the user
 
 **AMOUNT CONVERSION EXAMPLES:**

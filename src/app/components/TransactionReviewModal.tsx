@@ -11,6 +11,12 @@ interface TransactionData {
   data?: string;
   gasLimit?: string;
   description?: string;
+  tokenDetails?: {
+    symbol: string;
+    decimals: number;
+    formattedAmount: string;
+    contractAddress: string;
+  };
 }
 
 interface TransactionReviewModalProps {
@@ -66,6 +72,20 @@ const getTransactionType = (
   type: "native_transfer" | "token_transfer" | "contract_interaction";
   details: any;
 } => {
+  // If tokenDetails are provided, this is a token transfer
+  if (data.tokenDetails) {
+    return {
+      type: "token_transfer",
+      details: {
+        title: "Token Transfer",
+        description: `Sending ${data.tokenDetails.symbol}`,
+        tokenSymbol: data.tokenDetails.symbol,
+        tokenAmount: data.tokenDetails.formattedAmount,
+      },
+    };
+  }
+
+  // If no data or empty data, it's a native transfer
   if (!data.data || data.data === "0x") {
     return {
       type: "native_transfer",
@@ -76,25 +96,7 @@ const getTransactionType = (
     };
   }
 
-  // Check for ERC-20 transfer (function signature: 0xa9059cbb)
-  if (data.data.startsWith("0xa9059cbb")) {
-    const recipientHex = data.data.slice(10, 74); // 32 bytes after function selector
-    const amountHex = data.data.slice(74, 138); // Next 32 bytes
-
-    const recipient = "0x" + recipientHex.slice(24); // Remove padding
-    const amount = BigInt("0x" + amountHex).toString();
-
-    return {
-      type: "token_transfer",
-      details: {
-        title: "Token Transfer",
-        description: "Sending ERC-20 tokens",
-        tokenRecipient: recipient,
-        tokenAmount: amount,
-      },
-    };
-  }
-
+  // Otherwise, it's a contract interaction
   return {
     type: "contract_interaction",
     details: {
@@ -277,17 +279,6 @@ export function TransactionReviewModal({
               <div className="font-mono text-sm text-gray-900 break-all">
                 {transactionData.to}
               </div>
-              {type === "token_transfer" &&
-                details.tokenRecipient &&
-                details.tokenRecipient !== transactionData.to && (
-                  <div className="text-xs text-gray-500 mt-1">
-                    Token recipient:{" "}
-                    {`${details.tokenRecipient.slice(
-                      0,
-                      6
-                    )}...${details.tokenRecipient.slice(-4)}`}
-                  </div>
-                )}
             </div>
           </div>
 
@@ -308,7 +299,7 @@ export function TransactionReviewModal({
                 Token Amount:
               </span>
               <span className="font-semibold text-gray-900">
-                {details.tokenAmount} units
+                {details.tokenAmount} {details.tokenSymbol || "tokens"}
               </span>
             </div>
           )}
@@ -499,7 +490,17 @@ export function useTransactionReview() {
       setTransactionData(data);
       setIsOpen(true);
 
-      // Store promise resolvers globally so the modal can access them
+      // Check if supervisor agent already created a promise
+      if ((window as any).__transactionReviewPromise) {
+        console.log("🔄 HOOK: Using existing supervisor promise");
+        // Don't override the supervisor's promise, just open the modal
+        return;
+      }
+
+      // Only create our own promise if supervisor didn't create one
+      console.log(
+        "🔄 HOOK: Creating new promise (no supervisor promise found)"
+      );
       (window as any).__transactionReviewPromise = {
         resolve,
         reject,
@@ -511,29 +512,46 @@ export function useTransactionReview() {
     setIsOpen(false);
     setTransactionData(null);
 
-    // Clean up promise if it exists
-    if ((window as any).__transactionReviewPromise) {
-      delete (window as any).__transactionReviewPromise;
-    }
+    // Don't clean up the supervisor agent's promise here
+    // It will be cleaned up when the promise resolves/rejects
+    console.log("🔄 HOOK: Modal closed, preserving supervisor promise");
   };
 
   const handleComplete = (result: TransactionResult) => {
     console.log("✅ Transaction completed:", result);
 
-    // Resolve global promise
+    // Resolve global promise and clean up timeout
     if ((window as any).__transactionReviewPromise) {
-      (window as any).__transactionReviewPromise.resolve(result);
+      const promise = (window as any).__transactionReviewPromise;
+
+      // Clear timeout if it exists
+      if (promise.timeoutId) {
+        clearTimeout(promise.timeoutId);
+        console.log(`🕐 HOOK: Cleared timeout ${promise.timeoutId}`);
+      }
+
+      promise.resolve(result);
       delete (window as any).__transactionReviewPromise;
+      console.log("🧹 HOOK: Cleaned up transaction promise after success");
     }
   };
 
   const handleError = (error: string) => {
     console.error("❌ Transaction error:", error);
 
-    // Reject global promise
+    // Reject global promise and clean up timeout
     if ((window as any).__transactionReviewPromise) {
-      (window as any).__transactionReviewPromise.reject(new Error(error));
+      const promise = (window as any).__transactionReviewPromise;
+
+      // Clear timeout if it exists
+      if (promise.timeoutId) {
+        clearTimeout(promise.timeoutId);
+        console.log(`🕐 HOOK: Cleared timeout ${promise.timeoutId}`);
+      }
+
+      promise.reject(new Error(error));
       delete (window as any).__transactionReviewPromise;
+      console.log("🧹 HOOK: Cleaned up transaction promise after error");
     }
   };
 
