@@ -343,12 +343,29 @@ const treasuryStrategies: Record<string, any> = {
 
   // Execute treasury recommendations
   executeRecommendation: async (
-    params: { recommendationId: string; recommendation: any },
+    params: { recommendationId: string; recommendation?: any },
     userContext: any
   ) => {
-    const { recommendation } = params;
+    const { recommendationId, recommendation } = params;
 
     try {
+      // If no recommendation object provided, return helpful message
+      if (!recommendation) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                error:
+                  "Missing recommendation object. Please use secureFundsToLedger directly for fund security operations.",
+                suggestion:
+                  "For securing funds to Ledger, call secureFundsToLedger with sourceAddress, network, and tokenAddress parameters.",
+              }),
+            },
+          ],
+        };
+      }
+
       console.log(`🎯 Executing recommendation: ${recommendation.action}`);
 
       switch (recommendation.action) {
@@ -466,7 +483,7 @@ export const treasuryToolDefinitions = [
     type: "function" as const,
     name: "executeRecommendation",
     description:
-      "Execute a specific treasury management recommendation (secure to Ledger, bridge and stake, etc.)",
+      "Execute a specific treasury management recommendation (secure to Ledger, bridge and stake, etc.). For fund security, prefer using secureFundsToLedger directly.",
     parameters: {
       type: "object",
       properties: {
@@ -476,10 +493,11 @@ export const treasuryToolDefinitions = [
         },
         recommendation: {
           type: "object",
-          description: "The recommendation object to execute",
+          description:
+            "The recommendation object to execute (optional - if not provided, will suggest using secureFundsToLedger)",
         },
       },
-      required: ["recommendationId", "recommendation"],
+      required: ["recommendationId"],
       additionalProperties: false,
     },
   },
