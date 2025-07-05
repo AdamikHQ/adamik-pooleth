@@ -31,6 +31,15 @@ import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
 
 import useAudioDownload from "./hooks/useAudioDownload";
 
+// CCTP Service
+import { CCTPService, WalletProvider } from "@/app/services/cctp";
+
+// Get the CCTP service instance
+const cctpService = new CCTPService();
+
+// Export the CCTP service instance for use in other modules
+export { cctpService };
+
 export default function App() {
   const searchParams = useSearchParams();
 
@@ -141,6 +150,53 @@ export default function App() {
   const userWallet = wallets.find(
     (wallet) => wallet.walletClientType === "privy"
   );
+
+  // Configure CCTP wallet provider when Privy is authenticated
+  useEffect(() => {
+    if (authenticated && wallets.length > 0) {
+      const walletProvider: WalletProvider = {
+        getSigner: async () => {
+          if (!authenticated || !wallets.length) {
+            throw new Error("No authenticated wallet available");
+          }
+
+          const wallet = wallets[0];
+
+          // Get the Ethereum provider from the wallet
+          let provider;
+
+          try {
+            // Use getEthereumProvider() method which is the standard way to get provider from Privy wallets
+            provider = await wallet.getEthereumProvider();
+          } catch (error) {
+            throw new Error(
+              `Failed to get provider from wallet: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`
+            );
+          }
+
+          if (!provider) {
+            throw new Error("No valid provider found for wallet");
+          }
+
+          const { BrowserProvider } = await import("ethers");
+          const ethersProvider = new BrowserProvider(provider);
+          return ethersProvider.getSigner();
+        },
+        switchChain: async (chainId: number) => {
+          if (!authenticated || !wallets.length) {
+            throw new Error("No authenticated wallet available");
+          }
+          const wallet = wallets[0];
+          await wallet.switchChain(chainId);
+        },
+        isPrivy: true,
+      };
+
+      cctpService.setWalletProvider(walletProvider);
+    }
+  }, [authenticated, wallets]);
 
   // Auto-connect to Voice Agent upon Privy authentication
   useEffect(() => {

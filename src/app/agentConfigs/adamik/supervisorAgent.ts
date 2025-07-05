@@ -17,67 +17,11 @@ import {
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
 
-// Helper function to map chain IDs to their base chain types
-// EVM-ONLY: All supported chains map to ethereum base type
-// const getChainTypeFromChainId = (chainId: string): string => {
-//   // Map all EVM-compatible chain IDs to ethereum base wallet type
-//   const evmChains = [
-//     // Ethereum mainnet and testnets
-//     "ethereum",
-//     "ethereum-goerli",
-//     "ethereum-sepolia",
-//     "holesky",
+// Ledger Hardware Wallet Integration
+import { ledgerService } from "../../services/ledger";
 
-//     // Layer 2 and sidechains
-//     "polygon",
-//     "polygon-mumbai",
-//     "polygon-amoy",
-//     "arbitrum",
-//     "arbitrum-goerli",
-//     "arbitrum-sepolia",
-//     "optimism",
-//     "optimism-goerli",
-//     "optimism-sepolia",
-//     "base",
-//     "base-goerli",
-//     "base-sepolia",
-
-//     // Other EVM networks
-//     "avalanche",
-//     "avalanche-fuji",
-//     "bsc",
-//     "bsc-testnet",
-//     "zksync",
-//     "zksync-sepolia",
-//     "linea",
-//     "linea-sepolia",
-//     "gnosis",
-//     "gnosis-chiado",
-//     "moonbeam",
-//     "moonriver",
-//     "moonbase",
-//     "fantom",
-//     "mantle",
-//     "rootstock",
-//     "rootstock-testnet",
-//     "chiliz",
-//     "chiliz-testnet",
-//     "cronos",
-//     "world-chain",
-//     "monad-testnet",
-//     "berachain",
-//     "berachain-bepolia",
-//     "injective-evm-testnet",
-//   ];
-
-//   // All EVM chains use ethereum base type
-//   if (evmChains.includes(chainId)) {
-//     return "ethereum";
-//   }
-
-//   // Default to ethereum for unknown chains (assumed EVM-compatible)
-//   return "ethereum";
-// };
+// CCTP Cross-Chain Transfer Integration
+import { cctpService } from "../../App";
 
 // Tool logic implementations for all supported tools
 const toolLogic: Record<string, any> = {
@@ -767,6 +711,476 @@ const toolLogic: Record<string, any> = {
       return { content: [{ type: "text", text }] };
     }
   },
+
+  // Disconnect from Ledger device
+  disconnectLedgerDevice: async ({ deviceId }: { deviceId: string }) => {
+    try {
+      await ledgerService.disconnectDevice(deviceId);
+
+      const result = {
+        success: true,
+        message: `Successfully disconnected from device: ${deviceId}`,
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Device disconnection failed:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Device disconnection failed.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // List connected Ledger devices
+  listConnectedLedgerDevices: async () => {
+    try {
+      const devices = ledgerService.getConnectedDevices();
+
+      const result = {
+        success: true,
+        devices,
+        count: devices.length,
+        message:
+          devices.length > 0
+            ? `${devices.length} device(s) currently connected`
+            : "No devices currently connected",
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Failed to list connected devices:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to list connected devices.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Open Ethereum app on connected Ledger device
+  openLedgerEthereumApp: async ({ deviceId }: { deviceId: string }) => {
+    try {
+      console.log(`📱 Opening Ethereum app on device: ${deviceId}`);
+
+      await ledgerService.openEthereumApp(deviceId);
+
+      const result = {
+        success: true,
+        message: `Ethereum app opened successfully on device: ${deviceId}`,
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Failed to open Ethereum app:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message:
+          "Failed to open Ethereum app. Please ensure the device is connected and unlocked.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // CCTP Cross-Chain Transfer Tools
+  // ===============================
+
+  // Get supported chains for CCTP bridging
+  getSupportedBridgeChains: async () => {
+    try {
+      const supportedChains = cctpService.getSupportedChains();
+
+      const result = {
+        success: true,
+        supportedChains,
+        message: `CCTP bridging is supported on ${
+          supportedChains.length
+        } chains: ${supportedChains.join(", ")}`,
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to get supported bridge chains",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Estimate bridge transfer fee
+  estimateBridgeFee: async ({
+    sourceChain,
+    destinationChain,
+    amount,
+  }: {
+    sourceChain: string;
+    destinationChain: string;
+    amount: string;
+  }) => {
+    try {
+      const feeInfo = await cctpService.estimateFastTransferFee(
+        sourceChain as any,
+        destinationChain as any,
+        amount
+      );
+
+      const result = {
+        success: true,
+        feeInfo,
+        message: feeInfo
+          ? `Bridge fee: ${feeInfo.estimatedFee} USDC (${feeInfo.feeRate} basis points)`
+          : "Unable to estimate fee for this transfer",
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to estimate bridge fee",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  /*
+  // Check USDC allowance for bridging
+  checkBridgeAllowance: async ({
+    chain,
+    ownerAddress,
+  }: {
+    chain: string;
+    ownerAddress: string;
+  }) => {
+    try {
+      const allowance = await cctpService.getUSDCAllowance(
+        chain as any,
+        ownerAddress
+      );
+
+      const result = {
+        success: true,
+        allowance,
+        chain,
+        ownerAddress,
+        message: `Current USDC allowance: ${allowance} USDC`,
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to check bridge allowance",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+  */
+
+  // Approve USDC for bridging
+  approveBridgeTokens: async ({
+    chain,
+    amount,
+  }: {
+    chain: string;
+    amount: string;
+  }) => {
+    try {
+      // Validate supported chain using CCTPService
+      const supportedChains = cctpService.getSupportedChains();
+      if (!supportedChains.includes(chain as any)) {
+        throw new Error(`Chain ${chain} is not supported for CCTP bridging`);
+      }
+
+      // Use CCTPService's executeBridgeApproval method
+      const cctpResult = await cctpService.executeBridgeApproval(
+        chain as any,
+        amount
+      );
+
+      if (cctpResult.success) {
+        const result = {
+          success: true,
+          transactionHash: cctpResult.transactionHash,
+          message: `USDC approval successful for ${amount} USDC on ${cctpService.getChainDisplayName(
+            chain as any
+          )}`,
+          chain,
+          chainDisplayName: cctpService.getChainDisplayName(chain as any),
+          amount,
+        };
+
+        const text = JSON.stringify(result);
+        return { content: [{ type: "text", text }] };
+      } else {
+        throw new Error(cctpResult.error || "CCTP approval failed");
+      }
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to approve bridge tokens",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Initiate bridge transfer
+  initiateBridgeTransfer: async ({
+    sourceChain,
+    destinationChain,
+    amount,
+    recipient,
+  }: {
+    sourceChain: string;
+    destinationChain: string;
+    amount: string;
+    recipient: string;
+  }) => {
+    try {
+      // Validate supported chains using CCTPService
+      const supportedChains = cctpService.getSupportedChains();
+      if (!supportedChains.includes(sourceChain as any)) {
+        throw new Error(
+          `Source chain ${sourceChain} is not supported for CCTP bridging`
+        );
+      }
+      if (!supportedChains.includes(destinationChain as any)) {
+        throw new Error(
+          `Destination chain ${destinationChain} is not supported for CCTP bridging`
+        );
+      }
+
+      // Use CCTPService's executeBridgeTransfer method
+      const cctpResult = await cctpService.executeBridgeTransfer({
+        sourceChain: sourceChain as any,
+        destinationChain: destinationChain as any,
+        amount,
+        recipient,
+        usdcBalance: "0", // This parameter is not used in the current implementation
+      });
+
+      if (cctpResult.success) {
+        const result = {
+          success: true,
+          transactionHash: cctpResult.transactionHash,
+          messageHash: cctpResult.messageHash,
+          message: `Bridge transfer successful for ${amount} USDC from ${cctpService.getChainDisplayName(
+            sourceChain as any
+          )} to ${cctpService.getChainDisplayName(destinationChain as any)}`,
+          sourceChain,
+          sourceChainDisplayName: cctpService.getChainDisplayName(
+            sourceChain as any
+          ),
+          destinationChain,
+          destinationChainDisplayName: cctpService.getChainDisplayName(
+            destinationChain as any
+          ),
+          amount,
+          recipient,
+          sourceDomain: cctpResult.sourceDomain,
+        };
+
+        const text = JSON.stringify(result);
+        return { content: [{ type: "text", text }] };
+      } else {
+        throw new Error(cctpResult.error || "CCTP bridge transfer failed");
+      }
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to initiate bridge transfer",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Check bridge transfer status
+  checkBridgeStatus: async ({
+    transactionHash,
+    sourceDomain,
+  }: {
+    transactionHash: string;
+    sourceDomain: number;
+  }) => {
+    try {
+      // Use CCTPService to get attestation status
+      const attestationResult = await cctpService.getAttestation(
+        transactionHash,
+        sourceDomain
+      );
+
+      // Find the chain name from the domain (for better user experience)
+      const supportedChains = cctpService.getSupportedChains();
+      let sourceChainName = "";
+      for (const chain of supportedChains) {
+        const config = (cctpService as any).mainnetConfigs[chain];
+        if (config && config.domain === sourceDomain) {
+          sourceChainName = cctpService.getChainDisplayName(chain);
+          break;
+        }
+      }
+
+      const result = {
+        success: attestationResult.success,
+        attestation: attestationResult.attestation,
+        message: attestationResult.message,
+        error: attestationResult.error,
+        status: attestationResult.success ? "ready_to_mint" : "pending",
+        statusMessage: attestationResult.success
+          ? "Transfer is ready to be completed on destination chain"
+          : attestationResult.error || "Transfer is still pending",
+        transactionHash,
+        sourceDomain,
+        sourceChainName,
+        nextStep: attestationResult.success
+          ? "Use completeBridgeTransfer to mint tokens on destination chain"
+          : "Wait for attestation to be available",
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to check bridge status",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Complete bridge transfer (mint on destination)
+  completeBridgeTransfer: async ({
+    destinationChain,
+    messageBytes,
+    attestation,
+  }: {
+    destinationChain: string;
+    messageBytes: string;
+    attestation: string;
+  }) => {
+    try {
+      // Validate supported chain using CCTPService
+      const supportedChains = cctpService.getSupportedChains();
+      if (!supportedChains.includes(destinationChain as any)) {
+        throw new Error(
+          `Destination chain ${destinationChain} is not supported for CCTP bridging`
+        );
+      }
+
+      // Use CCTPService's executeBridgeMinting method
+      const cctpResult = await cctpService.executeBridgeMinting(
+        destinationChain as any,
+        messageBytes,
+        attestation
+      );
+
+      if (cctpResult.success) {
+        const result = {
+          success: true,
+          transactionHash: cctpResult.transactionHash,
+          message: `Bridge transfer completion successful on ${cctpService.getChainDisplayName(
+            destinationChain as any
+          )}`,
+          destinationChain,
+          destinationChainDisplayName: cctpService.getChainDisplayName(
+            destinationChain as any
+          ),
+          messageBytes,
+          attestation,
+        };
+
+        const text = JSON.stringify(result);
+        return { content: [{ type: "text", text }] };
+      } else {
+        throw new Error(cctpResult.error || "CCTP bridge minting failed");
+      }
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to complete bridge transfer",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Get bridge state from storage
+  /*
+  getBridgeState: async () => {
+    try {
+      const state = cctpService.loadBridgeState();
+
+      const result = {
+        success: true,
+        state,
+        message:
+          Object.keys(state).length > 0
+            ? "Bridge state loaded successfully"
+            : "No saved bridge state found",
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to get bridge state",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Clear bridge state
+  clearBridgeState: async () => {
+    try {
+      cctpService.clearBridgeState();
+
+      const result = {
+        success: true,
+        message: "Bridge state cleared successfully",
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      const result = {
+        success: false,
+        error: error.message,
+        message: "Failed to clear bridge state",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+  */
 };
 
 // Tool definitions for OpenAI function calling (names, descriptions, schemas)
@@ -1067,6 +1481,218 @@ export const toolDefinitions = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "disconnectLedgerDevice",
+    description: "Disconnect from a specific Ledger device",
+    parameters: {
+      type: "object",
+      properties: {
+        deviceId: {
+          type: "string",
+          description: "ID of the Ledger device to disconnect",
+        },
+      },
+      required: ["deviceId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "listConnectedLedgerDevices",
+    description: "List all currently connected Ledger devices",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "openLedgerEthereumApp",
+    description: "Open the Ethereum app on a connected Ledger device",
+    parameters: {
+      type: "object",
+      properties: {
+        deviceId: {
+          type: "string",
+          description: "ID of the connected Ledger device",
+        },
+      },
+      required: ["deviceId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "getSupportedBridgeChains",
+    description: "Get a list of supported chains for CCTP bridging",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "estimateBridgeFee",
+    description: "Estimate the fee for a bridge transfer",
+    parameters: {
+      type: "object",
+      properties: {
+        sourceChain: {
+          type: "string",
+          description: "The source chain ID",
+        },
+        destinationChain: {
+          type: "string",
+          description: "The destination chain ID",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to transfer",
+        },
+      },
+      required: ["sourceChain", "destinationChain", "amount"],
+      additionalProperties: false,
+    },
+  },
+  /*
+  {
+    type: "function" as const,
+    name: "checkBridgeAllowance",
+    description: "Check the USDC allowance for bridging",
+    parameters: {
+      type: "object",
+      properties: {
+        chain: {
+          type: "string",
+          description: "The chain ID",
+        },
+        ownerAddress: {
+          type: "string",
+          description: "The owner address",
+        },
+      },
+      required: ["chain", "ownerAddress"],
+      additionalProperties: false,
+    },
+  },
+  */
+  {
+    type: "function" as const,
+    name: "approveBridgeTokens",
+    description: "Approve USDC for bridging",
+    parameters: {
+      type: "object",
+      properties: {
+        chain: {
+          type: "string",
+          description: "The chain ID",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to approve",
+        },
+      },
+      required: ["chain", "amount"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "initiateBridgeTransfer",
+    description: "Initiate a bridge transfer",
+    parameters: {
+      type: "object",
+      properties: {
+        sourceChain: {
+          type: "string",
+          description: "The source chain ID",
+        },
+        destinationChain: {
+          type: "string",
+          description: "The destination chain ID",
+        },
+        amount: {
+          type: "string",
+          description: "The amount to transfer",
+        },
+        recipient: {
+          type: "string",
+          description: "The recipient address",
+        },
+      },
+      required: ["sourceChain", "destinationChain", "amount", "recipient"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "checkBridgeStatus",
+    description: "Check the status of a bridge transfer",
+    parameters: {
+      type: "object",
+      properties: {
+        transactionHash: {
+          type: "string",
+          description: "The transaction hash",
+        },
+        sourceDomain: {
+          type: "number",
+          description: "The source domain ID",
+        },
+      },
+      required: ["transactionHash", "sourceDomain"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "completeBridgeTransfer",
+    description: "Complete a bridge transfer",
+    parameters: {
+      type: "object",
+      properties: {
+        destinationChain: {
+          type: "string",
+          description: "The destination chain ID",
+        },
+        messageBytes: {
+          type: "string",
+          description: "The message bytes",
+        },
+        attestation: {
+          type: "string",
+          description: "The attestation",
+        },
+      },
+      required: ["destinationChain", "messageBytes", "attestation"],
+      additionalProperties: false,
+    },
+  },
+  /*
+  {
+    type: "function" as const,
+    name: "getBridgeState",
+    description: "Get the bridge state",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "clearBridgeState",
+    description: "Clear the bridge state",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  */
 ];
 
 // Supervisor agent entry point: executes tool logic for the main agent

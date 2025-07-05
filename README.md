@@ -30,6 +30,8 @@ A sophisticated voice-enabled blockchain assistant powered by OpenAI's Realtime 
 - **Multi-User Support**: Individual user sessions with personal wallet access
 - **Authentication Guards**: Protected routes ensuring secure access
 - **EVM Transactions**: Secure transaction processing via Privy's built-in modal
+- **Hardware Wallet Support**: Ledger device integration for secure cold storage
+- **Cross-Chain Bridging**: CCTP (Cross-Chain Transfer Protocol) integration for USDC transfers
 
 ## 🏗️ Architecture
 
@@ -566,6 +568,8 @@ This architecture provides **professional-grade treasury management** while main
 
 - **Privy Service** (`src/app/services/privy.ts`)
 - **Adamik Service** (`src/app/services/adamik.ts`)
+- **CCTP Service** (`src/app/services/cctp.ts`)
+- **Ledger Service** (`src/app/services/ledger.ts`)
 
 All third-party integrations are now centralized in the `src/app/services/` directory for maintainability and clarity.
 
@@ -581,6 +585,20 @@ All third-party integrations are now centralized in the `src/app/services/` dire
 - **Chain Operations**: Balance queries, transaction history, validator lists
 - **Transaction Encoding**: Convert transaction intents to signable format
 - **Multi-Chain Support**: Works across all supported blockchain networks
+
+**CCTP Service**
+
+- **Cross-Chain Bridging**: USDC transfers between supported chains using Circle's CCTP protocol
+- **Fee Estimation**: Calculate bridge transfer fees and validate transfer parameters
+- **Bridge State Management**: Track bridge transfer status and completion steps
+- **Chain Configuration**: Support for Ethereum, Arbitrum, Base, Optimism, Polygon, and other EVM chains
+
+**Ledger Service**
+
+- **Hardware Wallet Integration**: Connect to Ledger devices via WebHID
+- **Secure Operations**: Hardware-signed transactions for enhanced security
+- **Multi-Device Support**: Discover and manage multiple connected Ledger devices
+- **Cold Storage**: Transfer funds from hot wallets to hardware wallets
 
 #### 4. Infrastructure Layer
 
