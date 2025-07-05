@@ -4,7 +4,7 @@ import { privyService } from "@/app/services/privy";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, userId, walletAddress, chainType, hash } = body;
+    const { action, userId, walletAddress, chainType } = body;
 
     console.log("🔍 Wallet API Debug:", {
       action,
@@ -95,51 +95,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json(adamikWallet);
 
-      case "rawSign":
-        // Sign a raw hash for any blockchain transaction
-        if (!hash) {
-          return NextResponse.json(
-            { error: "Hash is required for raw signing" },
-            { status: 400 }
-          );
-        }
-
-        console.log(
-          `[rawSign] Received parameters - userId: ${userId}, walletAddress: ${walletAddress}, chainType: "${chainType}", hash: ${hash?.substring(
-            0,
-            20
-          )}...`
-        );
-
-        const walletForSigning = await privyService.getWallet(userId, {
-          walletAddress,
-          chainType,
-        });
-
-        if (!walletForSigning) {
-          return NextResponse.json(
-            { error: "No matching wallet found" },
-            { status: 404 }
-          );
-        }
-
-        try {
-          const signature = await privyService.rawSign(
-            walletForSigning.id,
-            hash
-          );
-          return NextResponse.json({
-            ...signature,
-            walletId: walletForSigning.id,
-            chainType: walletForSigning.chainType,
-          });
-        } catch (error) {
-          console.error("Error creating raw signature:", error);
-          return NextResponse.json(
-            { error: "Failed to create signature" },
-            { status: 500 }
-          );
-        }
+      // rawSign case removed - voice interface uses Privy's sendTransaction instead
 
       case "createWallet":
         // Create a new embedded wallet for the user on a specific chain

@@ -40,7 +40,7 @@ The system has **two different chain filtering policies** depending on how you a
 // Testnets
 "sepolia", "holesky", "base-sepolia", "polygon-amoy";
 
-// Non-EVM Networks
+// Non-EVM Networks (Available but filtered out for EVM-only policy)
 "solana", "tron", "cosmos", "stellar";
 ```
 
@@ -81,6 +81,8 @@ All wallets are organized into **5 base chain types**:
 3. **`tron`**: TRON network
 4. **`cosmos`**: Cosmos SDK-based networks
 5. **`stellar`**: Stellar network
+
+**⚠️ Current EVM-Only Policy**: The system currently implements an **EVM-only policy** where only Ethereum-compatible wallets are returned to users, even though the backend can see all wallet types.
 
 **Key Insight**: One wallet per base type, but EVM wallets work across ALL EVM networks with the same address.
 
@@ -184,53 +186,74 @@ node scripts/test-privy-service.js
 
 ## Comprehensive Test Results
 
-### ✅ All Tests Passed: 19/19
+### ✅ Current Test Status
 
-Our testing confirmed the system works perfectly with real multi-chain wallets:
+Our testing confirmed the system works correctly with EVM-only policy:
 
 #### Test User Profile
 
 ```json
 {
-  "userId": "did:privy:cmcnf68ol00j4i30mxrx7hgiv",
-  "email": "fabrice@adamik.io",
-  "totalWallets": 18,
-  "baseChainTypes": 5
+  "userId": "did:privy:cmcnvwtdj00o7l20mlzwvr5qd",
+  "email": "user@example.com",
+  "totalWallets": 5,
+  "baseChainTypes": 3,
+  "evmWalletsReturned": 2
 }
 ```
 
 #### Multi-Chain Wallet Portfolio
 
+**Backend View (All Wallets)**:
+
 ```json
 {
-  "ethereum": {
-    "count": 13,
-    "primaryAddress": "0xb5bC63da4C78A933c30D50f03333E34f84196B56",
-    "additionalWallets": [
-      "0x7c487f8F1B9742cC14038D9D16c19D1041Da47f5",
-      "0xc2F342a35a9919482F2efC2e09eEEa63DDe663AC"
-      // ... 10 more ethereum wallets
-    ]
-  },
-  "solana": {
-    "count": 2,
-    "addresses": [
-      "ACHFP5Ze4cw7SyFPShF1LsEQ4afpnMNRNgzJVjgmjFgG",
-      "2kry7vFPkmKGvPM6wXsMmKCmaEqfDCVpYDxuy8wm4Cc1"
-    ]
-  },
-  "tron": {
-    "count": 1,
-    "address": "TTrdkgmkVma6S1ZWabMR7qgSB1ouVbBEBk"
-  },
-  "cosmos": {
-    "count": 1,
-    "address": "cosmos1kneyyfm6vdul03hpm65hqtqtqljlwu547v5zks"
-  },
-  "stellar": {
-    "count": 1,
-    "address": "GDDIGYPJSZKM5CDIMDWMRB4SQNDMOWES3CIK3EUFQGCEFI4HDGTOSLKR"
-  }
+  "totalWallets": 5,
+  "allWallets": [
+    {
+      "chainType": "ethereum",
+      "address": "0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE",
+      "id": null
+    },
+    {
+      "chainType": "solana",
+      "address": "2MzhBMh6RPJbEcbayCFu8C7VCzghUZBgMmZzYTRBmnbY",
+      "id": "waxy7kmuk424febk05sym3p2"
+    },
+    {
+      "chainType": "cosmos",
+      "address": "cosmos1yupxkadqv2rw5j6lt4rc5dx04v8y5yujhphnep",
+      "id": "t9ev0auqdzz4uzaldrnbex3e"
+    },
+    {
+      "chainType": "ethereum",
+      "address": "0xFa2A1a3611A35A18a8a892424b13515274Ed1c16",
+      "id": "jpyvvqkkv280zvy0brru7de4"
+    },
+    {
+      "chainType": "cosmos",
+      "address": "cosmos1cnpc6k0js68fp3v0v8c3sa7cf47dn8flh4l53x",
+      "id": "jm1ei9e4a2kni6ofq8q7vrfi"
+    }
+  ]
+}
+```
+
+**Frontend View (EVM-Only Policy)**:
+
+```json
+{
+  "evmWalletsReturned": 2,
+  "wallets": [
+    {
+      "chainType": "ethereum",
+      "address": "0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE"
+    },
+    {
+      "chainType": "ethereum",
+      "address": "0xFa2A1a3611A35A18a8a892424b13515274Ed1c16"
+    }
+  ]
 }
 ```
 
@@ -238,20 +261,18 @@ Our testing confirmed the system works perfectly with real multi-chain wallets:
 
 **Core Functionality (8/8 ✅)**:
 
-- `listWallets`: Successfully lists all 18 wallets across 5 base types
-- `getAddress`: Correctly returns addresses for each chain type
+- `listWallets`: Successfully lists 5 total wallets, returns 2 EVM wallets (EVM-only policy)
+- `getAddress`: Correctly returns addresses for EVM chains
 - `createWallet`: Creates new wallets with proper base type mapping
 - `getPubKey`: Correctly handles Privy's security model (no public key exposure)
 - `getWalletForAdamik`: Returns properly formatted wallet data for Adamik API
 - `requestUserSignature`: Available for EVM transaction processing
 
-**Multi-Chain Support (5/5 ✅)**:
+**EVM-Only Policy (2/2 ✅)**:
 
-- Ethereum: ✅ Primary wallet + 12 additional wallets
-- Solana: ✅ 2 wallets with proper base58 addresses
-- TRON: ✅ 1 wallet with proper TRON address format
-- Cosmos: ✅ 1 wallet with proper bech32 address format
-- Stellar: ✅ 1 wallet with proper Stellar address format
+- Backend wallet detection: ✅ Sees all 5 wallets (2 EVM + 3 non-EVM)
+- Frontend filtering: ✅ Returns only 2 EVM wallets to users
+- Chain type filtering: ✅ Filters out Solana, Cosmos wallets correctly
 
 **Error Handling (3/3 ✅)**:
 
@@ -267,10 +288,11 @@ Our testing confirmed the system works perfectly with real multi-chain wallets:
 
 ### Key Technical Findings
 
-1. **Privy Security Model**: Public keys are intentionally not exposed through the API (security by design)
-2. **Wallet ID Handling**: Primary wallets may have `null` IDs, system gracefully handles this with address fallbacks
-3. **Multi-Chain Creation**: Users can create multiple wallets of the same base type (useful for organizing funds)
-4. **Chain Mapping**: EVM networks automatically map to ethereum base type, enabling seamless cross-network usage
+1. **EVM-Only Policy**: The system currently filters out non-EVM wallets on the frontend, only returning Ethereum-compatible wallets to users despite the backend having access to all wallet types
+2. **Privy Security Model**: Public keys are intentionally not exposed through the API (security by design)
+3. **Wallet ID Handling**: Primary wallets may have `null` IDs, system gracefully handles this with address fallbacks
+4. **Multi-Chain Creation**: Users can create multiple wallets of the same base type (useful for organizing funds)
+5. **Chain Mapping**: EVM networks automatically map to ethereum base type, enabling seamless cross-network usage
 
 ## Testing Scenarios
 
@@ -309,8 +331,8 @@ done
 Test wallet retrieval across different blockchain networks:
 
 ```bash
-# Test each chain type
-for chain in ethereum solana polygon arbitrum; do
+# Test EVM chain types (non-EVM chains will be filtered out)
+for chain in ethereum polygon arbitrum base optimism; do
   echo "Testing $chain..."
   curl -X POST "http://localhost:3000/api/wallet" \
     -H "Content-Type: application/json" \
@@ -339,16 +361,16 @@ for chain in ethereum base arbitrum polygon optimism; do
     }' | jq '.address'
 done
 
-# These should return different addresses (different base types)
+# These should return errors or no wallets (EVM-only policy)
 for chain in solana tron cosmos stellar; do
-  echo "Testing non-EVM chain: $chain (should return unique address)"
+  echo "Testing non-EVM chain: $chain (should return no wallet - EVM-only policy)"
   curl -X POST "http://localhost:3000/api/wallet" \
     -H "Content-Type: application/json" \
     -d '{
       "action": "getAddress",
       "userId": "your_user_id",
       "chainType": "'$chain'"
-    }' | jq '.address'
+    }' | jq '.address // "No wallet found (EVM-only policy)"'
 done
 ```
 

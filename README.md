@@ -272,27 +272,27 @@ npm start
 
 ### Multi-Chain Wallet Management
 
-The system supports creating and managing wallets across multiple blockchain networks with **different filtering policies** depending on how you access the system:
+The system supports creating and managing wallets across multiple blockchain networks with **EVM-only policy** currently implemented. While the backend can access all wallet types, the frontend only returns Ethereum-compatible wallets:
 
 #### Chain Filtering Policies
 
-**🎙️ Voice Agent (STRICT Filtering)**
+**🎙️ Voice Agent (STRICT + EVM-Only)**
 
-The voice agent enforces **strict chain validation** and only accepts chains explicitly defined in `src/app/agentConfigs/adamik/chains.ts`:
+The voice agent enforces **strict chain validation** and **EVM-only policy**:
 
-- **Allowed Chains**: Only ~40 predefined blockchain networks
+- **Allowed Chains**: Only EVM-compatible networks from `src/app/agentConfigs/adamik/chains.ts`
 - **Validation**: Each chain name must exactly match entries in `chains.ts`
-- **Voice Commands**: "Create a wallet for base" ✅ vs "Create a wallet for unknown-chain" ❌
-- **Purpose**: Prevents voice recognition errors and ensures reliable blockchain operations
+- **Voice Commands**: "Create a wallet for base" ✅ vs "Create a wallet for solana" ❌ (filtered out)
+- **Purpose**: Prevents voice recognition errors and ensures reliable EVM operations
 
-**🔧 Direct API (PERMISSIVE Filtering)**
+**🔧 Direct API (PERMISSIVE + EVM-Only)**
 
-The direct API endpoints (`/api/wallet`) use **permissive chain handling**:
+The direct API endpoints (`/api/wallet`) use **permissive chain handling** with **EVM-only filtering**:
 
 - **Accepts**: Any chain name as input
 - **Auto-Mapping**: Unknown chains automatically map to `ethereum` base type
-- **Fallback**: EVM-compatible networks work seamlessly
-- **Purpose**: Maximum flexibility for programmatic access
+- **EVM-Only**: Only returns Ethereum-compatible wallets to users
+- **Purpose**: Maximum flexibility for EVM-compatible operations
 
 #### Supported Base Chain Types
 
@@ -309,43 +309,45 @@ All wallets are organized into **5 base chain types**, regardless of specific ne
 The system intelligently maps specific networks to base types:
 
 ```typescript
-// Voice Agent: STRICT - only accepts predefined chains
+// Voice Agent: STRICT + EVM-Only - accepts predefined EVM chains
 const voiceChains = [
   "ethereum", "base", "arbitrum", "polygon", "optimism",
-  "bsc", "avalanche", "solana", "tron", "cosmos", "stellar"
-  // ... ~40 total predefined chains
+  "bsc", "avalanche", "zksync", "linea", "gnosis"
+  // ... EVM-compatible chains only
 ];
 
-// API: PERMISSIVE - maps any chain to base type
+// API: PERMISSIVE + EVM-Only - maps any chain to ethereum base type
 const chainMapping = {
   "base" → "ethereum",           // EVM networks map to ethereum
   "arbitrum" → "ethereum",
   "polygon" → "ethereum",
   "custom-evm" → "ethereum",     // Unknown EVM chains default to ethereum
-  "solana" → "solana",           // Direct mapping for other base types
+  "solana" → "filtered out",     // Non-EVM chains filtered out
   "unknown-chain" → "ethereum"   // Unknown chains fallback to ethereum
 };
 ```
 
 #### Voice Commands for Wallet Management
 
-**✅ Supported Voice Commands** (chains from `chains.ts`):
+**✅ Supported Voice Commands** (EVM chains from `chains.ts`):
 
-- "Create a new Solana wallet"
 - "Create a wallet for Base network"
 - "Show my Arbitrum address"
 - "List all my wallets"
 - "What's my Polygon address?"
+- "Send ETH on Optimism"
+- "Check my Base balance"
+
+**❌ Unsupported Voice Commands** (filtered out by EVM-only policy):
+
+- "Create a new Solana wallet"
 - "Create a TRON wallet"
-
-**❌ Unsupported Voice Commands** (not in `chains.ts`):
-
+- "Show my Cosmos address"
 - "Create a wallet for my-custom-chain"
-- "Show my unknown-network address"
 
 #### Wallet Creation Behavior
 
-**One Wallet Per Base Type**: Each user can have one wallet per base chain type, but that wallet works across all networks of that type:
+**EVM-Only Policy**: Each user can have multiple EVM wallets, but only EVM-compatible wallets are accessible:
 
 ```typescript
 // User creates ethereum wallet
@@ -356,10 +358,14 @@ createWallet({ chainType: "ethereum" });
 // - Arbitrum: 0xABC...123 (same address)
 // - Polygon: 0xABC...123 (same address)
 
-// User creates solana wallet
-createWallet({ chainType: "solana" });
-// Result: Separate Solana wallet
-// - Solana: ACHFP5Ze4cw7SyFPShF1LsEQ4afpnMNRNgzJVjgmjFgG
+// User creates additional ethereum wallet
+createWallet({ chainType: "ethereum" });
+// Result: Additional EVM wallet
+// - All EVM networks: 0xDEF...456 (different address)
+
+// Non-EVM wallets exist in backend but filtered out
+// Backend: Solana wallet exists but not accessible via frontend
+// Frontend: Only EVM wallets returned to users
 ```
 
 #### Comprehensive Chain Support
@@ -376,50 +382,71 @@ createWallet({ chainType: "solana" });
 
 - `sepolia`, `holesky`, `base-sepolia`, `polygon-amoy`
 
-**Non-EVM Networks**:
+**Non-EVM Networks** (Backend only, filtered out on frontend):
 
 - `solana`, `tron`, `cosmos`, `stellar`
 
-**API Supported Networks**: Any chain name (with automatic base type mapping)
+**API Supported Networks**: Any EVM-compatible chain name (with automatic ethereum base type mapping)
 
 #### Real-World Testing Results
 
-Our comprehensive testing confirmed the system works with **real multi-chain wallets**:
+Our comprehensive testing confirmed the system works with **EVM-only policy**:
+
+**Backend View (All Wallets)**:
 
 ```json
-// User: did:privy:cmcnf68ol00j4i30mxrx7hgiv
+// User: did:privy:cmcnvwtdj00o7l20mlzwvr5qd
 {
-  "wallets": [
+  "totalWallets": 5,
+  "allWallets": [
     {
       "chainType": "ethereum",
-      "address": "0xb5bC63da4C78A933c30D50f03333E34f84196B56",
-      "id": null // Primary wallet (no ID)
+      "address": "0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE",
+      "id": null
+    },
+    {
+      "chainType": "ethereum",
+      "address": "0xFa2A1a3611A35A18a8a892424b13515274Ed1c16",
+      "id": "jpyvvqkkv280zvy0brru7de4"
     },
     {
       "chainType": "solana",
-      "address": "ACHFP5Ze4cw7SyFPShF1LsEQ4afpnMNRNgzJVjgmjFgG",
-      "id": "d7uers5z1b11bcvkt8gk0ry5"
-    },
-    {
-      "chainType": "tron",
-      "address": "TTrdkgmkVma6S1ZWabMR7qgSB1ouVbBEBk",
-      "id": "kz3aa46a85dhpstw2t0mskf2"
+      "address": "2MzhBMh6RPJbEcbayCFu8C7VCzghUZBgMmZzYTRBmnbY",
+      "id": "waxy7kmuk424febk05sym3p2"
     },
     {
       "chainType": "cosmos",
-      "address": "cosmos1kneyyfm6vdul03hpm65hqtqtqljlwu547v5zks",
-      "id": "vn8e9wdawna1ya3vus9etpxd"
+      "address": "cosmos1yupxkadqv2rw5j6lt4rc5dx04v8y5yujhphnep",
+      "id": "t9ev0auqdzz4uzaldrnbex3e"
     },
     {
-      "chainType": "stellar",
-      "address": "GDDIGYPJSZKM5CDIMDWMRB4SQNDMOWES3CIK3EUFQGCEFI4HDGTOSLKR",
-      "id": "pfewukwk9z3drybncu6m5w9v"
+      "chainType": "cosmos",
+      "address": "cosmos1cnpc6k0js68fp3v0v8c3sa7cf47dn8flh4l53x",
+      "id": "jm1ei9e4a2kni6ofq8q7vrfi"
     }
   ]
 }
 ```
 
-**✅ All Tests Passed**: 19/19 including core functionality, multi-chain support, error handling, and agent integration.
+**Frontend View (EVM-Only)**:
+
+```json
+{
+  "evmWalletsReturned": 2,
+  "wallets": [
+    {
+      "chainType": "ethereum",
+      "address": "0xE7ccd18A3d23F72f5d12F9de54F8fB94b2C7B3CE"
+    },
+    {
+      "chainType": "ethereum",
+      "address": "0xFa2A1a3611A35A18a8a892424b13515274Ed1c16"
+    }
+  ]
+}
+```
+
+**✅ All Tests Passed**: EVM-only policy working correctly, filtering out non-EVM wallets while maintaining backend access.
 
 ### Push-to-Talk Mode
 

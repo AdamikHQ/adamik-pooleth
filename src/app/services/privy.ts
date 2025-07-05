@@ -10,10 +10,7 @@ export interface PrivyWallet {
   chainType: string;
 }
 
-export interface RawSignResponse {
-  signature: string;
-  encoding: string;
-}
+// RawSignResponse interface removed - not needed for voice interface approach
 
 class PrivyService {
   private client: PrivyClient;
@@ -303,88 +300,7 @@ class PrivyService {
     return null;
   }
 
-  /**
-   * Sign a raw hash using the wallet's private key
-   * This is used for transaction signing across any blockchain
-   * Based on: https://docs.privy.io/wallets/using-wallets/other-chains/raw-sign#rest-api
-   */
-  async rawSign(walletId: string, hash: string): Promise<RawSignResponse> {
-    console.log(`🔍 Raw signing hash ${hash} with wallet ${walletId}...`);
-    console.log(`🔍 Full wallet ID for debugging: "${walletId}"`);
-    console.log(`🔍 Wallet ID length: ${walletId.length}`);
-
-    try {
-      // Use the exact format from Privy documentation
-      const authHeader = `Basic ${Buffer.from(
-        `${process.env.PRIVY_APP_ID}:${process.env.PRIVY_APP_SECRET}`
-      ).toString("base64")}`;
-
-      console.log(`🔍 Auth header: ${authHeader.substring(0, 20)}...`);
-      console.log(
-        `🔍 Request URL: https://api.privy.io/v1/wallets/${walletId}/raw_sign`
-      );
-      console.log(
-        `🔍 Request body:`,
-        JSON.stringify({
-          params: { hash: hash },
-        })
-      );
-
-      const headers: Record<string, string> = {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        "privy-app-id": process.env.PRIVY_APP_ID!,
-      };
-
-      // Add authorization signature if available
-      if (process.env.PRIVY_AUTHORIZATION_KEY) {
-        headers["privy-authorization-signature"] =
-          process.env.PRIVY_AUTHORIZATION_KEY;
-        console.log(
-          `🔍 Using authorization key: ${process.env.PRIVY_AUTHORIZATION_KEY.substring(
-            0,
-            20
-          )}...`
-        );
-      } else {
-        console.log(
-          `⚠️ No PRIVY_AUTHORIZATION_KEY found - this might be required for server-side signing`
-        );
-      }
-
-      const response = await fetch(
-        `https://api.privy.io/v1/wallets/${walletId}/raw_sign`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            params: {
-              hash: hash,
-            },
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        console.log(`❌ HTTP ${response.status} error details:`);
-        try {
-          const errorText = await response.text();
-          console.log(`❌ Error response body: ${errorText}`);
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (e) {
-          console.log(`❌ Could not read error response body`);
-        }
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log("✅ Raw signature created");
-      return result.data;
-    } catch (error) {
-      console.error("❌ Error creating raw signature:", error);
-      throw new Error("Failed to create raw signature");
-    }
-  }
+  // Note: rawSign method removed - voice interface uses Privy's sendTransaction instead
 
   /**
    * Check if user has any embedded wallets
