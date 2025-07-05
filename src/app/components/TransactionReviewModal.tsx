@@ -11,6 +11,7 @@ interface TransactionData {
   data?: string;
   gasLimit?: string;
   description?: string;
+  recipient?: string; // Actual recipient address for token transfers
   tokenDetails?: {
     symbol: string;
     decimals: number;
@@ -272,13 +273,24 @@ export function TransactionReviewModal({
 
         {/* Transaction Details */}
         <div className="space-y-3">
-          {/* To Address */}
+          {/* Recipient Address - show actual recipient for token transfers */}
           <div className="flex justify-between items-start">
-            <span className="text-sm font-medium text-gray-600">To:</span>
+            <span className="text-sm font-medium text-gray-600">
+              {type === "token_transfer" && transactionData.recipient
+                ? "Recipient:"
+                : "To:"}
+            </span>
             <div className="text-right">
               <div className="font-mono text-sm text-gray-900 break-all">
-                {transactionData.to}
+                {type === "token_transfer" && transactionData.recipient
+                  ? transactionData.recipient
+                  : transactionData.to}
               </div>
+              {type === "token_transfer" && transactionData.recipient && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Via {transactionData.tokenDetails?.symbol || "token"} contract
+                </div>
+              )}
             </div>
           </div>
 

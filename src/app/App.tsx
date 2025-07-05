@@ -48,7 +48,8 @@ export default function App() {
   const searchParams = useSearchParams();
 
   // Privy authentication hooks
-  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { ready, authenticated, login, logout, user, sendTransaction } =
+    usePrivy();
   const { wallets } = useWallets();
 
   // Use urlCodec directly from URL search params (default: "opus")
@@ -222,12 +223,13 @@ export default function App() {
           const wallet = wallets[0];
           await wallet.switchChain(chainId);
         },
+        sendTransaction: sendTransaction, // Add Privy's sendTransaction function
         isPrivy: true,
       };
 
       cctpService.setWalletProvider(walletProvider);
     }
-  }, [authenticated, wallets]);
+  }, [authenticated, wallets, sendTransaction]);
 
   // Auto-connect to Voice Agent upon Privy authentication
   useEffect(() => {

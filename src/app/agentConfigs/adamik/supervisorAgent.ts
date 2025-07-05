@@ -244,8 +244,16 @@ const toolLogic: Record<string, any> = {
     userContext?: { userId: string; walletAddress?: string }
   ) => {
     // Extract transaction parameters from the request
-    const { to, value, chainId, data, gasLimit, description, tokenDetails } =
-      params;
+    const {
+      to,
+      value,
+      chainId,
+      data,
+      gasLimit,
+      description,
+      recipient,
+      tokenDetails,
+    } = params;
 
     // Validate required parameters
     if (!to) {
@@ -332,6 +340,7 @@ const toolLogic: Record<string, any> = {
         ...(data && { data }),
         ...(gasLimit && { gasLimit }),
         ...(description && { description }),
+        ...(recipient && { recipient }), // Add recipient for token transfers
         ...(tokenDetails && { tokenDetails }),
       };
 
@@ -639,7 +648,8 @@ const toolLogic: Record<string, any> = {
           value: "0", // No ETH value for token transfers
           chainId,
           data: transferData, // Include the encoded ERC-20 transfer data
-          description: description || `Send ${amount} ${tokenTicker} to ${to}`,
+          description: description || `Send ${amount} ${tokenTicker}`,
+          recipient: to, // Add actual recipient address for token transfers
           tokenDetails: {
             symbol: tokenTicker,
             decimals: decimals,
@@ -1004,11 +1014,10 @@ const toolLogic: Record<string, any> = {
           ? tokenDetails.token?.ticker || tokenDetails.token?.name
           : "Unknown"; // fallback if token not found in account state
 
-        const formattedAmount =
-          tokenDetails?.formattedAmount ||
-          (
-            Number(transferAmount) / Math.pow(10, tokenDetails?.decimals || 18)
-          ).toFixed(6);
+        // Always use the requested transfer amount, not the user's full balance
+        const formattedAmount = (
+          Number(transferAmount) / Math.pow(10, tokenDetails?.decimals || 18)
+        ).toFixed(6);
 
         transferResult = await toolLogic.sendTokenTransfer(
           {
@@ -1042,11 +1051,10 @@ const toolLogic: Record<string, any> = {
       if (tokenAddress && tokenDetails) {
         const tokenSymbol =
           tokenDetails.token?.ticker || tokenDetails.token?.name || "tokens";
-        const formattedAmount =
-          tokenDetails.formattedAmount ||
-          (
-            Number(transferAmount) / Math.pow(10, tokenDetails.decimals || 18)
-          ).toFixed(6);
+        // Always use the requested transfer amount, not the user's full balance
+        const formattedAmount = (
+          Number(transferAmount) / Math.pow(10, tokenDetails.decimals || 18)
+        ).toFixed(6);
         enhancedMessage = `Funds security operation prepared. Ready to transfer ${formattedAmount} ${tokenSymbol} from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
       } else if (tokenAddress) {
         enhancedMessage = `Funds security operation prepared. Ready to transfer tokens from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
@@ -1069,7 +1077,10 @@ const toolLogic: Record<string, any> = {
           ? {
               symbol: tokenDetails.token?.ticker || tokenDetails.token?.name,
               decimals: tokenDetails.decimals || tokenDetails.token?.decimals,
-              formattedAmount: tokenDetails.formattedAmount,
+              formattedAmount: (
+                Number(transferAmount) /
+                Math.pow(10, tokenDetails.decimals || 18)
+              ).toFixed(6),
               contractAddress: tokenDetails.token?.id,
             }
           : null,

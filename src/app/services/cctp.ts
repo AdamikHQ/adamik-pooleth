@@ -105,6 +105,7 @@ export interface BridgeBalanceInfo {
 export interface WalletProvider {
   getSigner: () => Promise<ethers.Signer>;
   switchChain?: (chainId: number) => Promise<void>;
+  sendTransaction?: (request: any, options?: any) => Promise<any>;
   isPrivy?: boolean;
 }
 
@@ -539,28 +540,70 @@ export class CCTPService {
       }
 
       await this.ensureCorrectNetwork(config);
-      const signer = await this.walletProvider.getSigner();
 
-      const usdcContract = new ethers.Contract(
-        config.usdcAddress,
-        USDC_ABI,
-        signer
-      );
+      // Use Privy's sendTransaction to show modal for bridge operations
+      if (this.walletProvider.sendTransaction && this.walletProvider.isPrivy) {
+        // Create contract interface to encode the approve call
+        const usdcInterface = new ethers.Interface(USDC_ABI);
+        const signer = await this.walletProvider.getSigner();
+        const usdcContract = new ethers.Contract(
+          config.usdcAddress,
+          USDC_ABI,
+          signer
+        );
 
-      const decimals = await usdcContract.decimals();
-      const amountInWei = ethers.parseUnits(amount, decimals);
+        const decimals = await usdcContract.decimals();
+        const amountInWei = ethers.parseUnits(amount, decimals);
 
-      const tx = await usdcContract.approve(
-        config.tokenMessengerAddress,
-        amountInWei
-      );
+        // Encode the approve function call
+        const approveData = usdcInterface.encodeFunctionData("approve", [
+          config.tokenMessengerAddress,
+          amountInWei,
+        ]);
 
-      await tx.wait();
+        // Use Privy's sendTransaction with UI enabled for bridge operations
+        const txResult = await this.walletProvider.sendTransaction(
+          {
+            to: config.usdcAddress,
+            value: "0",
+            data: approveData,
+            chainId: config.chainId,
+          },
+          {
+            uiOptions: {
+              showWalletUIs: true, // Enable Privy's modal for bridge operations
+            },
+          }
+        );
 
-      return {
-        success: true,
-        transactionHash: tx.hash,
-      };
+        return {
+          success: true,
+          transactionHash: txResult.hash,
+        };
+      } else {
+        // Fallback to direct ethers calls for non-Privy providers
+        const signer = await this.walletProvider.getSigner();
+        const usdcContract = new ethers.Contract(
+          config.usdcAddress,
+          USDC_ABI,
+          signer
+        );
+
+        const decimals = await usdcContract.decimals();
+        const amountInWei = ethers.parseUnits(amount, decimals);
+
+        const tx = await usdcContract.approve(
+          config.tokenMessengerAddress,
+          amountInWei
+        );
+
+        await tx.wait();
+
+        return {
+          success: true,
+          transactionHash: tx.hash,
+        };
+      }
     } catch (error) {
       return {
         success: false,
@@ -651,17 +694,57 @@ export class CCTPService {
       );
     }
 
-    const tx = await tokenMessenger.depositForBurn(
-      amountInWei,
-      destinationDomain,
-      mintRecipient,
-      sourceConfig.usdcAddress,
-      destinationCaller,
-      maxFee,
-      minFinalityThreshold
-    );
+    let tx: any;
+    let receipt: any;
 
-    const receipt = await tx.wait();
+    // Use Privy's sendTransaction to show modal for bridge operations
+    if (this.walletProvider.sendTransaction && this.walletProvider.isPrivy) {
+      // Encode the depositForBurn function call
+      const tokenMessengerInterface = new ethers.Interface(TOKEN_MESSENGER_ABI);
+      const depositData = tokenMessengerInterface.encodeFunctionData(
+        "depositForBurn",
+        [
+          amountInWei,
+          destinationDomain,
+          mintRecipient,
+          sourceConfig.usdcAddress,
+          destinationCaller,
+          maxFee,
+          minFinalityThreshold,
+        ]
+      );
+
+      // Use Privy's sendTransaction with UI enabled for bridge operations
+      const txResult = await this.walletProvider.sendTransaction(
+        {
+          to: sourceConfig.tokenMessengerAddress,
+          value: "0",
+          data: depositData,
+          chainId: sourceConfig.chainId,
+        },
+        {
+          uiOptions: {
+            showWalletUIs: true, // Enable Privy's modal for bridge operations
+          },
+        }
+      );
+
+      tx = txResult;
+      receipt = txResult; // Privy sendTransaction returns the receipt-like object
+    } else {
+      // Fallback to direct ethers calls for non-Privy providers
+      tx = await tokenMessenger.depositForBurn(
+        amountInWei,
+        destinationDomain,
+        mintRecipient,
+        sourceConfig.usdcAddress,
+        destinationCaller,
+        maxFee,
+        minFinalityThreshold
+      );
+
+      receipt = await tx.wait();
+    }
 
     let messageBytes: string | undefined;
     let nonce: string | undefined;
@@ -931,37 +1014,67 @@ export class CCTPService {
       signer
     );
 
-    const tx = await messageTransmitter.receiveMessage(
-      messageBytes,
-      attestation
-    );
+    let tx: any;
+    let receipt: any;
 
-    let receipt;
-    try {
-      receipt = await tx.wait();
-    } catch {
-      const maxAttempts = 60;
-      let attempts = 0;
+    // Use Privy's sendTransaction to show modal for bridge operations
+    if (this.walletProvider.sendTransaction && this.walletProvider.isPrivy) {
+      // Encode the receiveMessage function call
+      const messageTransmitterInterface = new ethers.Interface(
+        MESSAGE_TRANSMITTER_ABI
+      );
+      const receiveData = messageTransmitterInterface.encodeFunctionData(
+        "receiveMessage",
+        [messageBytes, attestation]
+      );
 
-      while (!receipt && attempts < maxAttempts) {
-        const provider = signer.provider;
-        if (provider) {
-          receipt = await provider.getTransactionReceipt(tx.hash);
-          if (receipt) {
-            break;
+      // Use Privy's sendTransaction with UI enabled for bridge operations
+      const txResult = await this.walletProvider.sendTransaction(
+        {
+          to: config.messageTransmitterAddress,
+          value: "0",
+          data: receiveData,
+          chainId: config.chainId,
+        },
+        {
+          uiOptions: {
+            showWalletUIs: true, // Enable Privy's modal for bridge operations
+          },
+        }
+      );
+
+      tx = txResult;
+      receipt = txResult; // Privy sendTransaction returns the receipt-like object
+    } else {
+      // Fallback to direct ethers calls for non-Privy providers
+      tx = await messageTransmitter.receiveMessage(messageBytes, attestation);
+
+      try {
+        receipt = await tx.wait();
+      } catch {
+        const maxAttempts = 60;
+        let attempts = 0;
+
+        while (!receipt && attempts < maxAttempts) {
+          const provider = signer.provider;
+          if (provider) {
+            receipt = await provider.getTransactionReceipt(tx.hash);
+            if (receipt) {
+              break;
+            }
+          }
+
+          attempts++;
+          if (attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
         }
 
-        attempts++;
-        if (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!receipt) {
+          throw new Error(
+            `Transaction ${tx.hash} failed to confirm after ${maxAttempts} attempts`
+          );
         }
-      }
-
-      if (!receipt) {
-        throw new Error(
-          `Transaction ${tx.hash} failed to confirm after ${maxAttempts} attempts`
-        );
       }
     }
 

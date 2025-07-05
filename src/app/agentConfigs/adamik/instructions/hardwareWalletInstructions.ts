@@ -58,17 +58,32 @@ When users want to secure funds on hardware wallet:
    - Ask which asset to secure first: "I found multiple assets that should be secured. Would you like to start with your USDC or ETH?"
    - Handle one asset at a time
 
-4. **Execute secure transfer**: Call secureFundsToLedger directly with:
-   - sourceAddress: user's wallet address
-   - network: the specific network (e.g., "optimism")
-   - tokenAddress: for ERC-20 tokens (leave empty for native ETH)
-   - amount: specific amount or leave empty for max transfer
+4. **CRITICAL WORKFLOW - Execute in this exact order**:
+   
+   **Step 4a: Get user's Privy wallet address**
+   - ALWAYS call getAddress() FIRST to get the user's Privy hot wallet address
+   - This is the SOURCE address (where funds are coming FROM)
+   
+   **Step 4b: Connect to Ledger device**
+   - Call connectToLedgerHardwareWallet() to connect and get Ledger address
+   - This is the DESTINATION address (where funds are going TO)
+   
+   **Step 4c: Execute the secure transfer**
+   - Call secureFundsToLedger with these parameters:
+     - sourceAddress: THE PRIVY WALLET ADDRESS from Step 4a (NOT the Ledger address!)
+     - network: the specific network (e.g., "optimism")
+     - tokenAddress: for ERC-20 tokens (leave empty for native ETH)
+     - amount: specific amount or leave empty for max transfer
 
 5. **Confirm security benefits**: 
    - "Your funds are now secured in cold storage on your hardware wallet"
    - "The private keys never left your Ledger device"
 
-**CRITICAL: Never use executeRecommendation for fund security - always use secureFundsToLedger directly**
+**CRITICAL REMINDERS:**
+- NEVER use the Ledger address as sourceAddress - that's the destination!
+- ALWAYS get the user's Privy wallet address first with getAddress()
+- The flow is: Privy wallet (source) → Ledger wallet (destination)
+- Never use executeRecommendation for fund security - always use secureFundsToLedger directly
 
 ### **Hardware Wallet Troubleshooting:**
 If hardware operations fail:
