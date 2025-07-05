@@ -951,11 +951,13 @@ const toolLogic: Record<string, any> = {
     destinationChain,
     amount,
     recipient,
+    usdcBalance,
   }: {
     sourceChain: string;
     destinationChain: string;
     amount: string;
     recipient: string;
+    usdcBalance: string;
   }) => {
     try {
       // Validate supported chains using CCTPService
@@ -977,7 +979,7 @@ const toolLogic: Record<string, any> = {
         destinationChain: destinationChain as any,
         amount,
         recipient,
-        usdcBalance: "0", // This parameter is not used in the current implementation
+        usdcBalance,
       });
 
       if (cctpResult.success) {
@@ -1550,7 +1552,7 @@ export const toolDefinitions = [
         },
         amount: {
           type: "string",
-          description: "The amount to transfer",
+          description: "The amount to transfer, in USDC",
         },
       },
       required: ["sourceChain", "destinationChain", "amount"],
@@ -1592,7 +1594,7 @@ export const toolDefinitions = [
         },
         amount: {
           type: "string",
-          description: "The amount to approve",
+          description: "The amount to approve, in USDC",
         },
       },
       required: ["chain", "amount"],
@@ -1616,14 +1618,24 @@ export const toolDefinitions = [
         },
         amount: {
           type: "string",
-          description: "The amount to transfer",
+          description: "The amount to transfer, in USDC",
         },
         recipient: {
           type: "string",
           description: "The recipient address",
         },
+        usdcBalance: {
+          type: "string",
+          description: "The USDC balance of the sender account",
+        },
       },
-      required: ["sourceChain", "destinationChain", "amount", "recipient"],
+      required: [
+        "sourceChain",
+        "destinationChain",
+        "amount",
+        "recipient",
+        "usdcBalance",
+      ],
       additionalProperties: false,
     },
   },

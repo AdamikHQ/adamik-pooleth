@@ -12,6 +12,7 @@ import {
   transactionInstructions,
   nonEvmInstructions,
 } from "./transactionInstructions";
+import { bridgeInstructions } from "./bridgeInstructions";
 
 export interface InstructionContext {
   includeHardwareWallet?: boolean;
@@ -19,6 +20,7 @@ export interface InstructionContext {
   includeTransactions?: boolean;
   includeNetworks?: boolean;
   includeWalletCreation?: boolean;
+  includeBridge?: boolean;
 }
 
 export const composeInstructions = (
@@ -30,6 +32,7 @@ export const composeInstructions = (
     includeTransactions = true,
     includeNetworks = true,
     includeWalletCreation = true,
+    includeBridge = true,
   } = context;
 
   const instructionSections = [baseInstructions];
@@ -54,6 +57,10 @@ export const composeInstructions = (
     instructionSections.push(transactionInstructions);
   }
 
+  if (includeBridge) {
+    instructionSections.push(bridgeInstructions);
+  }
+
   // Always include non-EVM instructions
   instructionSections.push(nonEvmInstructions);
 
@@ -73,6 +80,7 @@ export const instructionPresets = {
       includeTransactions: true,
       includeNetworks: true,
       includeWalletCreation: true,
+      includeBridge: false,
     }),
 
   // Security-focused (hardware wallet emphasis)
@@ -83,6 +91,7 @@ export const instructionPresets = {
       includeTransactions: true,
       includeNetworks: true,
       includeWalletCreation: false,
+      includeBridge: true,
     }),
 
   // Treasury management focused
@@ -93,6 +102,18 @@ export const instructionPresets = {
       includeTransactions: false,
       includeNetworks: true,
       includeWalletCreation: false,
+      includeBridge: true,
+    }),
+
+  // Bridge-focused (CCTP cross-chain transfers)
+  bridge: () =>
+    composeInstructions({
+      includeHardwareWallet: false,
+      includeTreasury: false,
+      includeTransactions: false,
+      includeNetworks: true,
+      includeWalletCreation: false,
+      includeBridge: true,
     }),
 };
 

@@ -11,8 +11,8 @@ export type SupportedChain =
   | "codex"
   | "ethereum"
   | "linea"
-  | "op-mainnet"
-  | "polygon-pos"
+  | "optimism"
+  | "polygon"
   | "unichain"
   | "world-chain";
 export type BridgeStep = "idle" | "approved" | "burned" | "minted";
@@ -44,7 +44,6 @@ export interface ChainConfig {
 export interface BridgeTransferParams {
   sourceChain: SupportedChain;
   destinationChain: SupportedChain;
-  // TODO get balance as a param, from Adamik API, instead of local getUSDCBalance function
   usdcBalance: string;
   amount: string;
   recipient: string;
@@ -237,7 +236,7 @@ export class CCTPService {
       usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
       domain: 6,
     },
-    "op-mainnet": {
+    optimism: {
       chainId: 10,
       rpcUrl: "https://mainnet.optimism.io",
       tokenMessengerAddress: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", // TokenMessengerV2
@@ -245,7 +244,7 @@ export class CCTPService {
       usdcAddress: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", // USDC on Optimism
       domain: 2,
     },
-    "polygon-pos": {
+    polygon: {
       chainId: 137,
       rpcUrl: "https://polygon-rpc.com",
       tokenMessengerAddress: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", // TokenMessengerV2
@@ -640,6 +639,8 @@ export class CCTPService {
     const totalRequired = ethers.parseUnits(params.amount, decimals) + maxFee;
     const usdcBalanceWei = ethers.parseUnits(params.usdcBalance, decimals);
 
+    console.log("🔍 CCTP Debug - usdcBalanceWei:", usdcBalanceWei);
+
     if (usdcBalanceWei < totalRequired) {
       const totalRequiredFormatted = ethers.formatUnits(
         totalRequired,
@@ -1015,9 +1016,9 @@ export class CCTPService {
         return "Ethereum";
       case "linea":
         return "Linea";
-      case "op-mainnet":
+      case "optimism":
         return "OP Mainnet";
-      case "polygon-pos":
+      case "polygon":
         return "Polygon";
       case "unichain":
         return "Unichain";
