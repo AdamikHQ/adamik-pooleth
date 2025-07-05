@@ -576,7 +576,87 @@ const toolLogic: Record<string, any> = {
     }
   },
 
-  // Secure funds to Ledger hardware wallet (simplified version using existing transfer tools)
+  // Generic asset transfer function (DRY principle)
+  transferAssets: async (
+    {
+      to,
+      amount,
+      network = "ethereum",
+      tokenAddress,
+      description,
+    }: {
+      to: string;
+      amount: string;
+      network?: string;
+      tokenAddress?: string;
+      description?: string;
+    },
+    userContext?: { userId: string }
+  ) => {
+    try {
+      console.log("💸 Executing asset transfer...");
+
+      if (!userContext?.userId) {
+        throw new Error("User context required for asset transfer");
+      }
+
+      let transferResult;
+      if (tokenAddress) {
+        // Token transfer
+        transferResult = await toolLogic.sendTokenTransfer(
+          {
+            tokenAddress,
+            to,
+            amount,
+            chainId: network,
+            description: description || `Transfer ${amount} tokens to ${to}`,
+          },
+          userContext
+        );
+      } else {
+        // Native token transfer
+        transferResult = await toolLogic.requestUserSignature(
+          {
+            to,
+            value: amount,
+            chainId: network,
+            description: description || `Transfer ${amount} wei to ${to}`,
+          },
+          userContext
+        );
+      }
+
+      // Parse and return result
+      const transferData = JSON.parse(transferResult.content[0].text);
+      const result = {
+        success: true,
+        operation: "asset_transfer",
+        to,
+        amount,
+        network,
+        tokenAddress,
+        transferResult: transferData,
+        message: `Asset transfer prepared. Ready to transfer ${
+          tokenAddress ? "tokens" : "native currency"
+        } to ${to}`,
+      };
+
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Asset transfer failed:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message:
+          "Asset transfer failed. Please check parameters and try again.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
+  // Secure funds to Ledger hardware wallet (now uses generic transferAssets)
   secureFundsToLedger: async (
     {
       sourceAddress,
@@ -652,49 +732,114 @@ const toolLogic: Record<string, any> = {
         }
       }
 
-      // Step 3: Execute transfer using existing tools
-      console.log("✍️ Executing transfer to Ledger address...");
+      // Step 3: Get token details from account state for accurate descriptions
+      let friendlyDescription: string;
+      let tokenDetails: any = null;
 
-      let transferResult;
       if (tokenAddress) {
-        // Token transfer
-        transferResult = await toolLogic.sendTokenTransfer(
-          {
-            tokenAddress,
-            to: destinationAddress,
-            amount: transferAmount,
-            chainId: network,
-            description: `Secure ${transferAmount} tokens to Ledger hardware wallet`,
-          },
-          userContext
-        );
+        console.log("🔍 Fetching token details from account state...");
+        try {
+          const accountStateResult = await toolLogic.getAccountState(
+            {
+              chainId: network,
+              accountId: sourceAddress,
+            },
+            userContext
+          );
+
+          const accountData = JSON.parse(accountStateResult.content[0].text);
+          tokenDetails = accountData?.balances?.tokens?.find(
+            (token: any) =>
+              token.token?.id?.toLowerCase() === tokenAddress.toLowerCase()
+          );
+
+          if (tokenDetails) {
+            const tokenSymbol =
+              tokenDetails.token?.ticker ||
+              tokenDetails.token?.name ||
+              "tokens";
+            const decimals =
+              tokenDetails.decimals || tokenDetails.token?.decimals || 18;
+            const formattedAmount =
+              tokenDetails.formattedAmount ||
+              (Number(transferAmount) / Math.pow(10, decimals)).toFixed(6);
+
+            friendlyDescription = `Secure ${formattedAmount} ${tokenSymbol} to Ledger hardware wallet`;
+            console.log(
+              `📋 Token details: ${tokenSymbol} (${decimals} decimals) - ${formattedAmount} formatted`
+            );
+          } else {
+            console.warn("⚠️ Token not found in account state, using fallback");
+            friendlyDescription = `Secure tokens to Ledger hardware wallet`;
+          }
+        } catch (error) {
+          console.warn("⚠️ Could not fetch token details:", error);
+          friendlyDescription = `Secure tokens to Ledger hardware wallet`;
+        }
       } else {
-        // Native token transfer
-        transferResult = await toolLogic.requestUserSignature(
-          {
-            to: destinationAddress,
-            value: transferAmount,
-            chainId: network,
-            description: `Secure ${transferAmount} wei to Ledger hardware wallet`,
-          },
-          userContext
-        );
+        // For native currency, convert wei to ETH (18 decimals)
+        const ethAmount = Number(transferAmount) / Math.pow(10, 18);
+        friendlyDescription = `Secure ${ethAmount.toFixed(
+          6
+        )} ETH to Ledger hardware wallet`;
       }
 
-      // Return combined result
+      // Step 4: Execute transfer using generic transferAssets function
+      console.log("✍️ Executing transfer to Ledger address...");
+
+      const transferResult = await toolLogic.transferAssets(
+        {
+          to: destinationAddress,
+          amount: transferAmount,
+          network,
+          tokenAddress,
+          description: friendlyDescription,
+        },
+        userContext
+      );
+
+      // Parse transfer result and enhance with Ledger-specific info
+      const transferData = JSON.parse(transferResult.content[0].text);
+
+      // Create enhanced message with token details if available
+      let enhancedMessage: string;
+      if (tokenAddress && tokenDetails) {
+        const tokenSymbol =
+          tokenDetails.token?.ticker || tokenDetails.token?.name || "tokens";
+        const formattedAmount =
+          tokenDetails.formattedAmount ||
+          (
+            Number(transferAmount) / Math.pow(10, tokenDetails.decimals || 18)
+          ).toFixed(6);
+        enhancedMessage = `Funds security operation prepared. Ready to transfer ${formattedAmount} ${tokenSymbol} from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+      } else if (tokenAddress) {
+        enhancedMessage = `Funds security operation prepared. Ready to transfer tokens from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+      } else {
+        const ethAmount = Number(transferAmount) / Math.pow(10, 18);
+        enhancedMessage = `Funds security operation prepared. Ready to transfer ${ethAmount.toFixed(
+          6
+        )} ETH from Privy wallet to Ledger hardware wallet ${destinationAddress}`;
+      }
+
       const result = {
-        success: true,
+        success: transferData.success,
         operation: "fund_security",
         sourceAddress,
         destinationAddress,
         amount: transferAmount,
         network,
         tokenAddress,
+        tokenDetails: tokenDetails
+          ? {
+              symbol: tokenDetails.token?.ticker || tokenDetails.token?.name,
+              decimals: tokenDetails.decimals || tokenDetails.token?.decimals,
+              formattedAmount: tokenDetails.formattedAmount,
+              contractAddress: tokenDetails.token?.id,
+            }
+          : null,
         ledgerDevice: connectionData.deviceName,
-        transferResult: JSON.parse(transferResult.content[0].text),
-        message: `Funds security operation prepared. Ready to transfer ${
-          tokenAddress ? "tokens" : "native currency"
-        } from Privy wallet to Ledger hardware wallet ${destinationAddress}`,
+        transferResult: transferData.transferResult,
+        message: enhancedMessage,
       };
 
       const text = JSON.stringify(result);
@@ -1435,6 +1580,43 @@ export const toolDefinitions = [
         },
       },
       required: ["tokenAddress", "to", "amount", "chainId", "description"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "transferAssets",
+    description:
+      "Generic asset transfer function that handles both native currency and token transfers. Use this for any transfer operation.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description: "The recipient address for the transfer",
+        },
+        amount: {
+          type: "string",
+          description:
+            "The amount to transfer in smallest units (wei for native, token units for ERC-20)",
+        },
+        network: {
+          type: "string",
+          description:
+            "The EVM chain ID (default: 'ethereum'). Supported: 'ethereum', 'polygon', 'base', 'arbitrum', etc.",
+        },
+        tokenAddress: {
+          type: "string",
+          description:
+            "The contract address of the token to transfer (optional - leave empty for native currency transfer)",
+        },
+        description: {
+          type: "string",
+          description:
+            "A human-readable description of the transfer (optional - will be auto-generated if not provided)",
+        },
+      },
+      required: ["to", "amount"],
       additionalProperties: false,
     },
   },

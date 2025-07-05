@@ -171,6 +171,7 @@ const treasuryStrategies: Record<string, any> = {
             action: "secure_to_ledger",
             network,
             token: "USDC",
+            tokenAddress: usdcToken.token.id, // Store the actual contract address from balance data
             amount: usdcAmount,
             reason: `${usdcAmount} USDC exceeds security threshold of ${TREASURY_RULES.SECURITY_THRESHOLD} USDC`,
             estimatedSavings: `Enhanced security for $${usdcAmount.toFixed(
@@ -400,15 +401,59 @@ const treasuryStrategies: Record<string, any> = {
   executeSecureToLedger: async (recommendation: any, userContext: any) => {
     console.log("🔒 Executing secure to Ledger transfer...");
 
+    // Determine tokenAddress for ERC-20 tokens (ETH = native, so no tokenAddress)
+    let tokenAddress =
+      recommendation.token === "ETH" ? undefined : recommendation.tokenAddress;
+
+    // If tokenAddress is missing for a token transfer, fetch it from getAccountState
+    if (recommendation.token !== "ETH" && !tokenAddress) {
+      console.log("📡 Token address missing, fetching from account state...");
+
+      try {
+        const balanceResult = await getNextResponseFromSupervisor.execute(
+          {
+            toolName: "getAccountState",
+            params: {
+              chainId: recommendation.network,
+              accountId: userContext.walletAddress,
+            },
+          },
+          { userContext }
+        );
+
+        const balanceData = JSON.parse(balanceResult.content[0].text);
+        const tokenData = balanceData?.balances?.tokens?.find(
+          (t: any) =>
+            t.token?.ticker?.toLowerCase() ===
+              recommendation.token.toLowerCase() ||
+            t.token?.symbol?.toLowerCase() ===
+              recommendation.token.toLowerCase()
+        );
+
+        if (tokenData?.token?.id) {
+          tokenAddress = tokenData.token.id;
+          console.log(`✅ Found token address: ${tokenAddress}`);
+        } else {
+          throw new Error(
+            `Could not find ${recommendation.token} contract address on ${recommendation.network}`
+          );
+        }
+      } catch (error) {
+        console.error("❌ Failed to fetch token address:", error);
+        throw new Error(
+          `Failed to get ${recommendation.token} contract address for ${recommendation.network}`
+        );
+      }
+    }
+
     const result = await getNextResponseFromSupervisor.execute(
       {
         toolName: "secureFundsToLedger",
         params: {
           sourceAddress: userContext.walletAddress,
           network: recommendation.network,
-          tokenSymbol: recommendation.token, // "USDC" or "ETH"
-          recipient: "ledger", // Let supervisor handle Ledger connection and address discovery
-          reason: "Treasury security recommendation", // Context for the transfer
+          tokenAddress, // Correct parameter name and logic
+          // Note: amount is optional - supervisor will calculate max available if not provided
         },
       },
       { userContext }

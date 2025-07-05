@@ -65,122 +65,146 @@ export function useHandleServerEvent({
         fnResult
       );
 
-      // Handle transaction requests from requestUserSignature and sendTokenTransfer
-      if (
-        functionCallParams.name === "requestUserSignature" ||
-        functionCallParams.name === "sendTokenTransfer"
-      ) {
-        try {
-          const resultText = fnResult.content?.[0]?.text || "{}";
+      // Handle transaction requests from any function that returns a transaction_request
+      try {
+        const resultText = fnResult.content?.[0]?.text || "{}";
 
-          // Try to parse the result
-          let result;
+        // Try to parse the result
+        let result;
+        try {
+          result = JSON.parse(resultText);
+        } catch {
+          console.error(
+            `Failed to parse ${functionCallParams.name} result:`,
+            resultText
+          );
+
+          // If it's an error message, show it to the user
+          if (resultText.startsWith("Error:")) {
+            sendClientEvent({
+              type: "conversation.item.create",
+              item: {
+                type: "function_call_output",
+                call_id: functionCallParams.call_id,
+                output: resultText,
+              },
+            });
+            sendClientEvent({ type: "response.create" });
+            return;
+          }
+          // Don't throw the error, just continue with normal processing
+          result = null;
+        }
+
+        // Check if any function returned a transaction_request (including nested ones)
+        if (result && typeof result === "object") {
+          const callId = functionCallParams.call_id || "unknown";
+
+          // Check direct transaction_request
+          if (result.type === "transaction_request" && result.data) {
+            await handleTransactionRequest(result, callId);
+            return;
+          }
+
+          // Check nested transaction_request (e.g., from secureFundsToLedger -> transferAssets -> sendTokenTransfer)
+          if (
+            result.transferResult?.type === "transaction_request" &&
+            result.transferResult?.data
+          ) {
+            await handleTransactionRequest(result.transferResult, callId);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("Error handling transaction request:", error);
+      }
+
+      // Extracted transaction handling logic
+      async function handleTransactionRequest(
+        transactionRequest: any,
+        callId: string
+      ) {
+        if (
+          transactionRequest.type === "transaction_request" &&
+          transactionRequest.data
+        ) {
+          // Use Privy's sendTransaction for EVM transaction handling
           try {
-            result = JSON.parse(resultText);
-          } catch (parseError) {
-            console.error(
-              `Failed to parse ${functionCallParams.name} result:`,
-              resultText
+            const transactionData = transactionRequest.data;
+            const { to, value, chainId, data, gasLimit } = transactionData;
+
+            if (!to) {
+              throw new Error("No recipient address found");
+            }
+
+            if (!value && value !== 0) {
+              throw new Error("No transaction value found");
+            }
+
+            // Map string chainId to numeric chain ID for Privy using centralized config
+            const numericChainId = stringToChainId[chainId];
+
+            if (!numericChainId) {
+              throw new Error(
+                `Chain ID "${chainId}" is not supported. Supported chains: ${Object.keys(
+                  stringToChainId
+                ).join(", ")}`
+              );
+            }
+
+            // Build transaction request for Privy
+            const transactionRequestForPrivy = {
+              to,
+              value: value.toString(),
+              chainId: numericChainId, // ✅ Use numeric chain ID for Privy
+              ...(data && { data }),
+              ...(gasLimit && { gasLimit }),
+            };
+
+            // Use Privy's sendTransaction with the active wallet
+            const transactionResult = await sendTransaction(
+              transactionRequestForPrivy
             );
 
-            // If it's an error message, show it to the user
-            if (resultText.startsWith("Error:")) {
-              sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                  type: "function_call_output",
-                  call_id: functionCallParams.call_id,
-                  output: resultText,
-                },
-              });
-              sendClientEvent({ type: "response.create" });
-              return;
-            }
-            throw parseError;
+            console.log("Transaction successful:", transactionResult.hash);
+
+            // Send successful response back to the agent
+            sendClientEvent({
+              type: "conversation.item.create",
+              item: {
+                type: "function_call_output",
+                call_id: callId,
+                output: JSON.stringify({
+                  success: true,
+                  transactionHash: transactionResult.hash,
+                  to: to,
+                  value: value,
+                  chainId: chainId,
+                }),
+              },
+            });
+            sendClientEvent({ type: "response.create" });
+            return;
+          } catch (error) {
+            console.error("Transaction failed:", error);
+
+            // Send error response back to the agent
+            sendClientEvent({
+              type: "conversation.item.create",
+              item: {
+                type: "function_call_output",
+                call_id: callId,
+                output: JSON.stringify({
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                  details:
+                    "Transaction failed. Please check your wallet and try again.",
+                }),
+              },
+            });
+            sendClientEvent({ type: "response.create" });
+            return;
           }
-
-          if (result.type === "transaction_request" && result.data) {
-            // Use Privy's sendTransaction for EVM transaction handling
-            try {
-              const transactionData = result.data;
-              const { to, value, chainId, data, gasLimit } = transactionData;
-
-              if (!to) {
-                throw new Error("No recipient address found");
-              }
-
-              if (!value && value !== 0) {
-                throw new Error("No transaction value found");
-              }
-
-              // Map string chainId to numeric chain ID for Privy using centralized config
-              const numericChainId = stringToChainId[chainId];
-
-              if (!numericChainId) {
-                throw new Error(
-                  `Chain ID "${chainId}" is not supported. Supported chains: ${Object.keys(
-                    stringToChainId
-                  ).join(", ")}`
-                );
-              }
-
-              // Build transaction request for Privy
-              const transactionRequest = {
-                to,
-                value: value.toString(),
-                chainId: numericChainId, // ✅ Use numeric chain ID for Privy
-                ...(data && { data }),
-                ...(gasLimit && { gasLimit }),
-              };
-
-              // Use Privy's sendTransaction with the active wallet
-              const transactionResult = await sendTransaction(
-                transactionRequest
-              );
-
-              console.log("Transaction successful:", transactionResult.hash);
-
-              // Send successful response back to the agent
-              sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                  type: "function_call_output",
-                  call_id: functionCallParams.call_id,
-                  output: JSON.stringify({
-                    success: true,
-                    transactionHash: transactionResult.hash,
-                    to: to,
-                    value: value,
-                    chainId: chainId,
-                  }),
-                },
-              });
-              sendClientEvent({ type: "response.create" });
-              return;
-            } catch (error) {
-              console.error("Transaction failed:", error);
-
-              // Send error response back to the agent
-              sendClientEvent({
-                type: "conversation.item.create",
-                item: {
-                  type: "function_call_output",
-                  call_id: functionCallParams.call_id,
-                  output: JSON.stringify({
-                    success: false,
-                    error:
-                      error instanceof Error ? error.message : String(error),
-                    details:
-                      "Transaction failed. Please check your wallet and try again.",
-                  }),
-                },
-              });
-              sendClientEvent({ type: "response.create" });
-              return;
-            }
-          }
-        } catch (error) {
-          console.error("Error handling transaction request:", error);
         }
       }
 
