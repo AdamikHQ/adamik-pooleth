@@ -313,6 +313,229 @@ Direct Response: User → Main Agent → Response (50ms)
 Tool Call: User → Main Agent → Supervisor → API → Response (200ms)
 ```
 
+### Treasury Manager Integration
+
+Building on the Main Agent + Supervisor pattern, the system includes a **Treasury Manager** component that provides strategic financial analysis and portfolio optimization capabilities. This specialized component operates within the unified Adamik agent system.
+
+#### 💰 Treasury Manager (Strategic Financial Layer)
+
+**Role**: Strategic portfolio optimization and financial decision-making
+
+**Key Capabilities**:
+
+- **Portfolio Analysis**: Cross-chain asset analysis and risk assessment
+- **Security Recommendations**: Automated Ledger transfer suggestions for high-value assets
+- **Yield Optimization**: Multi-chain yield farming opportunity identification
+- **Rule-Based Automation**: Configurable treasury management policies
+- **Risk Management**: Balance security, yield, and liquidity requirements
+
+#### 🔄 Smart Routing Architecture
+
+The Main Agent now includes **intelligent routing** that delegates to the appropriate specialist:
+
+```typescript
+// Smart routing in Main Agent (index.ts)
+const createToolLogicProxy = () => ({
+  get: (_target, toolName: string) => async (args, ...) => {
+    // Treasury management tools → Treasury Manager
+    const treasuryTools = ["analyzePortfolio", "executeRecommendation"];
+
+    if (treasuryTools.includes(toolName)) {
+      return getNextResponseFromTreasuryManager.execute(
+        { toolName, params: args },
+        { transcriptItems, addTranscriptBreadcrumb, userContext }
+      );
+    }
+
+    // Blockchain operations → Supervisor Agent
+    return getNextResponseFromSupervisor.execute(
+      { toolName, params: args },
+      { transcriptItems, addTranscriptBreadcrumb, userContext }
+    );
+  }
+});
+```
+
+#### 🏗️ Multi-Component Communication Flow
+
+```mermaid
+graph TD
+    A["🎤 User: Optimize my portfolio"] --> B["🎙️ Main Agent"]
+    B --> C["🔍 Smart Router"]
+    C --> D["💰 Treasury Manager"]
+
+    D --> E["📊 Portfolio Analysis"]
+    E --> F["📞 Delegate to Supervisor"]
+    F --> G["🧠 Blockchain Supervisor"]
+    G --> H["🌐 Multi-Chain Balance Queries"]
+    H --> I["📈 Return Balance Data"]
+    I --> D
+
+    D --> J["🎯 Apply Financial Rules"]
+    J --> K["📋 Security Threshold Check"]
+    K --> L["💱 Yield Rate Analysis"]
+    L --> M["📤 Strategic Recommendations"]
+    M --> B
+    B --> N["🔊 Voice Response"]
+
+    style B fill:#e1f5fe
+    style D fill:#f3e5f5
+    style G fill:#fff3e0
+    style J fill:#e8f5e8
+```
+
+#### 📋 Treasury Management Rules
+
+The Treasury Manager implements configurable financial policies:
+
+```typescript
+const TREASURY_RULES = {
+  SECURITY_THRESHOLD: 500, // USDC threshold for Ledger security
+  MIN_YIELD_IMPROVEMENT: 0.5, // Minimum yield improvement to justify bridge (0.5%)
+  SUPPORTED_YIELD_PROTOCOLS: ["aave", "compound"],
+  RISK_TOLERANCE: "moderate", // conservative, moderate, aggressive
+};
+```
+
+**Example Rules Implementation**:
+
+- **Security Rule**: USDC > $500 USD automatically flagged for Ledger hardware wallet storage
+- **Yield Rule**: USDC yield improvements > 0.5% on Aave trigger cross-chain optimization recommendations
+- **Risk Rule**: Always prioritize security over yield for high-value USDC positions
+
+#### 🎯 Treasury Voice Commands
+
+**Portfolio Optimization**:
+
+- _"Optimize my portfolio"_ → Full cross-chain USDC analysis with security and Aave yield recommendations
+- _"Analyze my assets"_ → Comprehensive USDC portfolio breakdown across all EVM networks
+- _"Show me yield opportunities"_ → USDC Aave yield farming analysis across chains
+
+**Security Management**:
+
+- _"Secure my high-value assets"_ → Automatic identification and Ledger transfer recommendations for USDC > $500
+- _"Check security recommendations"_ → Review USDC positions that exceed security thresholds
+
+**Strategy Execution**:
+
+- _"Execute security recommendations"_ → Automated Ledger transfers for flagged USDC positions
+- _"Implement yield strategy"_ → Cross-chain USDC bridge and Aave stake operations
+
+#### 🔧 Component Interaction Examples
+
+**Portfolio Analysis Flow**:
+
+```typescript
+// 1. User voice command triggers Treasury Manager
+analyzePortfolio: async ({ address, networks }) => {
+  // 2. Treasury Manager requests balance data from Supervisor
+  for (const network of networks) {
+    const balanceResult = await getNextResponseFromSupervisor.execute(
+      {
+        toolName: "getAccountState",
+        params: { chainId: network, accountId: address },
+      },
+      { userContext }
+    );
+
+    portfolioData.push(JSON.parse(balanceResult.content[0].text));
+  }
+
+  // 3. Treasury Manager applies financial rules and generates strategy
+  const securityAnalysis = await analyzeSecurityNeeds(portfolioData);
+  const yieldAnalysis = await analyzeYieldOpportunities(portfolioData);
+
+  return { recommendations: { security, yield, summary } };
+};
+```
+
+**Strategy Execution Flow**:
+
+```typescript
+// Treasury Manager executing Ledger security transfer
+executeSecureToLedger: async (recommendation, userContext) => {
+  // Delegate actual blockchain operations to Supervisor
+  const result = await getNextResponseFromSupervisor.execute(
+    {
+      toolName: "secureFundsToLedger",
+      params: {
+        sourceAddress: userContext.walletAddress,
+        network: recommendation.network,
+        tokenAddress: recommendation.tokenAddress,
+      },
+    },
+    { userContext }
+  );
+
+  return { action: "secure_to_ledger", status: "executed", result };
+};
+```
+
+#### 📊 Treasury Analytics Features
+
+**Cross-Chain Portfolio Analysis**:
+
+- Real-time balance aggregation across Ethereum, Polygon, Base, Arbitrum
+- USD value calculation with live price feeds
+- Asset distribution and concentration risk analysis
+
+**Security Assessment**:
+
+- Automatic identification of high-value positions requiring cold storage
+- Ledger hardware wallet integration for secure fund transfers
+- Risk scoring based on wallet exposure and asset types
+
+**Yield Optimization**:
+
+- Multi-chain USDC yield rate comparison on Aave (Ethereum: 2.5%, Polygon: 4.2%, Base: 3.1%, Arbitrum: 3.8%)
+- Gas cost vs. yield benefit analysis for USDC positions
+- Automated USDC bridging and Aave staking recommendations
+
+**Smart Recommendations**:
+
+- Prioritized action items based on security and yield potential
+- Clear cost-benefit analysis for each recommendation
+- One-click execution for approved strategies
+
+#### 🚨 Treasury Architecture Benefits
+
+**Specialized Expertise**:
+
+- **Treasury Manager**: Financial strategy and portfolio optimization
+- **Blockchain Supervisor**: Technical execution and transaction handling
+- **Main Agent**: Voice interface and intelligent routing
+
+**Seamless Integration**:
+
+- Unified user experience within single Adamik agent
+- Shared context and authentication across components
+- Direct function calls between components (no API overhead)
+
+**Configurable Strategies**:
+
+- Adjustable risk tolerance and security thresholds
+- Customizable yield optimization parameters
+- Extensible rule engine for new financial strategies
+
+#### 🔄 File Structure
+
+```
+src/app/agentConfigs/adamik/
+├── index.ts                    # Main Agent with smart routing
+├── supervisorAgent.ts          # Blockchain operations specialist
+├── treasuryManager.ts          # Treasury strategy specialist
+├── chains.ts                   # Shared EVM chain configuration
+└── schemas.ts                  # API interaction schemas
+```
+
+**Component Responsibilities**:
+
+- **`index.ts`**: Voice interface + intelligent tool routing
+- **`supervisorAgent.ts`**: 15+ blockchain tools (balances, transactions, Ledger)
+- **`treasuryManager.ts`**: 2+ treasury tools (portfolio analysis, strategy execution)
+
+This architecture provides **professional-grade treasury management** while maintaining the simplicity and performance of the unified agent system. Users get sophisticated financial analysis and automated portfolio optimization through natural voice commands, with all blockchain execution seamlessly handled by the existing supervisor infrastructure.
+
 ### Component Architecture
 
 #### 1. Agent Layer

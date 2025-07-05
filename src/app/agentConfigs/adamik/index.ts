@@ -12,9 +12,13 @@ import {
   getNextResponseFromSupervisor,
   toolDefinitions,
 } from "./supervisorAgent";
+import {
+  getNextResponseFromTreasuryManager,
+  treasuryToolDefinitions,
+} from "./treasuryManager";
 import type { Tool } from "@/app/types";
 
-// Generic delegator for all tools
+// Smart delegator that routes to appropriate agent based on tool type
 const createToolLogicProxy = () =>
   new Proxy(
     {},
@@ -26,11 +30,23 @@ const createToolLogicProxy = () =>
           transcriptItems: any,
           addTranscriptBreadcrumb: any,
           userContext?: { userId: string; walletAddress?: string }
-        ) =>
-          getNextResponseFromSupervisor.execute(
+        ) => {
+          // Treasury management tools go to Treasury Manager
+          const treasuryTools = ["analyzePortfolio", "executeRecommendation"];
+
+          if (treasuryTools.includes(toolName)) {
+            return getNextResponseFromTreasuryManager.execute(
+              { toolName, params: args },
+              { transcriptItems, addTranscriptBreadcrumb, userContext }
+            );
+          }
+
+          // All other tools go to Blockchain Supervisor
+          return getNextResponseFromSupervisor.execute(
             { toolName, params: args },
             { transcriptItems, addTranscriptBreadcrumb, userContext }
-          ),
+          );
+        },
     }
   );
 
@@ -377,7 +393,7 @@ Call requestUserSignature with:
 - One ethereum wallet serves all EVM networks seamlessly
 - Hardware wallets provide enhanced security for fund storage
 `,
-  tools: toolDefinitions as Tool[],
+  tools: [...toolDefinitions, ...treasuryToolDefinitions] as Tool[],
   toolLogic: createToolLogicProxy(),
   downstreamAgents: [],
 };
