@@ -90,7 +90,7 @@ class LedgerService {
 
     return new Promise((resolve, reject) => {
       let resolved = false;
-      let subscription: any;
+      let subscription: any = null;
 
       const finish = (devices: LedgerDevice[] | null, error?: any) => {
         if (!resolved) {
@@ -152,7 +152,7 @@ class LedgerService {
 
       const devices = await new Promise<DiscoveredDevice[]>(
         (resolve, reject) => {
-          let subscription: any;
+          let subscription: any = null;
           const observer = {
             next: (devices: DiscoveredDevice[]) => {
               if (subscription) subscription.unsubscribe();
@@ -339,6 +339,17 @@ class LedgerService {
    */
   getConnectedDevices(): LedgerDevice[] {
     return Array.from(this.connectedDevices.values());
+  }
+
+  /**
+   * Reset all device connections and state
+   */
+  resetDeviceState(): void {
+    console.log("🔄 Resetting device state...");
+    this.connectedDevices.clear();
+    this.currentSessionId = null;
+    this.ethSigner = null;
+    console.log("✅ Device state reset complete");
   }
 
   /**

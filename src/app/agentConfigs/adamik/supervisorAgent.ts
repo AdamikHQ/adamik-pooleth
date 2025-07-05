@@ -17,70 +17,67 @@ import {
 import { makeProxyRequest } from "@/app/services/adamik";
 import { makeWalletRequest } from "@/app/lib/api";
 
-// Ledger Hardware Wallet Integration
-import { ledgerService } from "../../services/ledger";
-
 // Helper function to map chain IDs to their base chain types
 // EVM-ONLY: All supported chains map to ethereum base type
-const getChainTypeFromChainId = (chainId: string): string => {
-  // Map all EVM-compatible chain IDs to ethereum base wallet type
-  const evmChains = [
-    // Ethereum mainnet and testnets
-    "ethereum",
-    "ethereum-goerli",
-    "ethereum-sepolia",
-    "holesky",
+// const getChainTypeFromChainId = (chainId: string): string => {
+//   // Map all EVM-compatible chain IDs to ethereum base wallet type
+//   const evmChains = [
+//     // Ethereum mainnet and testnets
+//     "ethereum",
+//     "ethereum-goerli",
+//     "ethereum-sepolia",
+//     "holesky",
 
-    // Layer 2 and sidechains
-    "polygon",
-    "polygon-mumbai",
-    "polygon-amoy",
-    "arbitrum",
-    "arbitrum-goerli",
-    "arbitrum-sepolia",
-    "optimism",
-    "optimism-goerli",
-    "optimism-sepolia",
-    "base",
-    "base-goerli",
-    "base-sepolia",
+//     // Layer 2 and sidechains
+//     "polygon",
+//     "polygon-mumbai",
+//     "polygon-amoy",
+//     "arbitrum",
+//     "arbitrum-goerli",
+//     "arbitrum-sepolia",
+//     "optimism",
+//     "optimism-goerli",
+//     "optimism-sepolia",
+//     "base",
+//     "base-goerli",
+//     "base-sepolia",
 
-    // Other EVM networks
-    "avalanche",
-    "avalanche-fuji",
-    "bsc",
-    "bsc-testnet",
-    "zksync",
-    "zksync-sepolia",
-    "linea",
-    "linea-sepolia",
-    "gnosis",
-    "gnosis-chiado",
-    "moonbeam",
-    "moonriver",
-    "moonbase",
-    "fantom",
-    "mantle",
-    "rootstock",
-    "rootstock-testnet",
-    "chiliz",
-    "chiliz-testnet",
-    "cronos",
-    "world-chain",
-    "monad-testnet",
-    "berachain",
-    "berachain-bepolia",
-    "injective-evm-testnet",
-  ];
+//     // Other EVM networks
+//     "avalanche",
+//     "avalanche-fuji",
+//     "bsc",
+//     "bsc-testnet",
+//     "zksync",
+//     "zksync-sepolia",
+//     "linea",
+//     "linea-sepolia",
+//     "gnosis",
+//     "gnosis-chiado",
+//     "moonbeam",
+//     "moonriver",
+//     "moonbase",
+//     "fantom",
+//     "mantle",
+//     "rootstock",
+//     "rootstock-testnet",
+//     "chiliz",
+//     "chiliz-testnet",
+//     "cronos",
+//     "world-chain",
+//     "monad-testnet",
+//     "berachain",
+//     "berachain-bepolia",
+//     "injective-evm-testnet",
+//   ];
 
-  // All EVM chains use ethereum base type
-  if (evmChains.includes(chainId)) {
-    return "ethereum";
-  }
+//   // All EVM chains use ethereum base type
+//   if (evmChains.includes(chainId)) {
+//     return "ethereum";
+//   }
 
-  // Default to ethereum for unknown chains (assumed EVM-compatible)
-  return "ethereum";
-};
+//   // Default to ethereum for unknown chains (assumed EVM-compatible)
+//   return "ethereum";
+// };
 
 // Tool logic implementations for all supported tools
 const toolLogic: Record<string, any> = {
@@ -525,105 +522,79 @@ const toolLogic: Record<string, any> = {
   // Hardware Wallet (Ledger) Integration Tools
   // ==========================================
 
-  // Discover available Ledger hardware wallet devices
-  discoverLedgerDevices: async ({ timeout = 10000 }: { timeout?: number }) => {
+  // Initiate Ledger connection flow through modal
+  connectToLedgerHardwareWallet: async () => {
     try {
-      console.log("🔍 Starting Ledger device discovery...");
+      console.log("🔐 Initiating Ledger hardware wallet connection...");
 
-      // Check WebHID support
-      if (!ledgerService.isWebHIDSupported()) {
+      // Check if trigger function exists
+      if (typeof (window as any).__triggerLedgerModal !== "function") {
+        console.error(
+          "❌ __triggerLedgerModal function not found on window object"
+        );
         throw new Error(
-          "WebHID not supported in this browser. Please use Chrome, Edge, or another Chromium-based browser."
+          "Ledger modal trigger function not available. Please refresh the page."
         );
       }
 
-      const devices = await ledgerService.discoverDevices(timeout);
+      console.log("✅ Found __triggerLedgerModal function, proceeding...");
 
-      const result = {
+      // Trigger the modal flow and wait for result
+      const result = await new Promise<any>((resolve, reject) => {
+        // Store the promise resolvers globally so the modal can access them
+        const promiseId = Math.random().toString(36).substr(2, 9);
+        console.log(
+          `🆔 Creating __ledgerConnectionPromise with ID: ${promiseId}`
+        );
+
+        (window as any).__ledgerConnectionPromise = {
+          resolve,
+          reject,
+          id: promiseId,
+        };
+
+        console.log("📞 Calling __triggerLedgerModal()...");
+        // Trigger the modal to open
+        (window as any).__triggerLedgerModal?.();
+
+        // Set a timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          console.warn(
+            `⏰ Ledger connection timed out after 60 seconds for promise ${promiseId}`
+          );
+          // Clean up the global promise before rejecting
+          if ((window as any).__ledgerConnectionPromise?.id === promiseId) {
+            delete (window as any).__ledgerConnectionPromise;
+            console.log(`🧹 Cleaned up timed out promise ${promiseId}`);
+          }
+          reject(new Error("Ledger connection timed out after 60 seconds"));
+        }, 60000);
+
+        // Store timeout ID for potential cleanup
+        (window as any).__ledgerConnectionPromise.timeoutId = timeoutId;
+      });
+
+      console.log("🎉 Received result from Ledger modal:", result);
+
+      const response = {
         success: true,
-        devices,
-        message: `Found ${devices.length} Ledger device(s). Use connectLedgerDevice to connect to a specific device.`,
+        address: result.address,
+        publicKey: result.publicKey,
+        derivationPath: result.derivationPath,
+        deviceId: result.deviceId,
+        deviceName: result.deviceName,
+        message: `Successfully connected to Ledger hardware wallet. Address: ${result.address}`,
       };
 
-      const text = JSON.stringify(result);
+      const text = JSON.stringify(response);
       return { content: [{ type: "text", text }] };
     } catch (error: any) {
-      console.error("❌ Device discovery failed:", error);
+      console.error("❌ Ledger connection failed:", error);
       const result = {
         success: false,
         error: error.message,
         message:
-          "Device discovery failed. Please ensure your Ledger device is connected and unlocked.",
-      };
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    }
-  },
-
-  // Connect to a specific Ledger device
-  connectLedgerDevice: async ({ deviceId }: { deviceId: string }) => {
-    try {
-      console.log(`🔗 Connecting to Ledger device: ${deviceId}`);
-
-      const device = await ledgerService.connectDevice(deviceId);
-
-      const result = {
-        success: true,
-        device,
-        message: `Successfully connected to ${device.name}. Device is ready for operations.`,
-      };
-
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    } catch (error: any) {
-      console.error("❌ Device connection failed:", error);
-      const result = {
-        success: false,
-        error: error.message,
-        message:
-          "Device connection failed. Please ensure the device is unlocked and the Ethereum app is open.",
-      };
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    }
-  },
-
-  // Get Ethereum address from connected Ledger device
-  getLedgerEthereumAddress: async ({
-    deviceId,
-    derivationPath = "44'/60'/0'/0/0",
-    verify = false,
-  }: {
-    deviceId: string;
-    derivationPath?: string;
-    verify?: boolean;
-  }) => {
-    try {
-      console.log(`📍 Getting Ethereum address from device: ${deviceId}`);
-
-      const addressInfo = await ledgerService.getEthereumAddress(
-        deviceId,
-        derivationPath,
-        verify
-      );
-
-      const result = {
-        success: true,
-        addressInfo,
-        message: verify
-          ? `Address retrieved and verified on device: ${addressInfo.address}`
-          : `Address retrieved: ${addressInfo.address}`,
-      };
-
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    } catch (error: any) {
-      console.error("❌ Address retrieval failed:", error);
-      const result = {
-        success: false,
-        error: error.message,
-        message:
-          "Address retrieval failed. Please ensure the device is connected and the Ethereum app is open.",
+          "Failed to connect to Ledger hardware wallet. Please ensure your device is connected, unlocked, and the Ethereum app is open.",
       };
       const text = JSON.stringify(result);
       return { content: [{ type: "text", text }] };
@@ -637,13 +608,11 @@ const toolLogic: Record<string, any> = {
       amount,
       network = "ethereum",
       tokenAddress,
-      derivationPath = "44'/60'/0'/0/0",
     }: {
       sourceAddress: string;
       amount?: string;
       network?: string;
       tokenAddress?: string;
-      derivationPath?: string;
     },
     userContext?: { userId: string }
   ) => {
@@ -654,28 +623,17 @@ const toolLogic: Record<string, any> = {
         throw new Error("User context required for fund transfer");
       }
 
-      // Step 1: Get connected Ledger devices
-      const connectedDevices = ledgerService.getConnectedDevices();
-      if (connectedDevices.length === 0) {
-        throw new Error(
-          "No Ledger devices connected. Please connect a device first using discoverLedgerDevices and connectLedgerDevice."
-        );
+      // Step 1: Connect to Ledger and get destination address
+      const connectionResult = await toolLogic.connectToLedgerHardwareWallet();
+      const connectionData = JSON.parse(connectionResult.content[0].text);
+
+      if (!connectionData.success) {
+        throw new Error(`Failed to connect to Ledger: ${connectionData.error}`);
       }
 
-      // Use the first connected device
-      const device = connectedDevices[0];
+      const destinationAddress = connectionData.address;
 
-      // Step 2: Get destination address from Ledger
-      console.log("📍 Getting destination address from Ledger...");
-      const addressInfo = await ledgerService.getEthereumAddress(
-        device.id!,
-        derivationPath,
-        false // Don't require verification for this step
-      );
-
-      const destinationAddress = addressInfo.address;
-
-      // Step 3: Calculate transfer amount if not provided
+      // Step 2: Calculate transfer amount if not provided
       let transferAmount = amount;
       if (!transferAmount) {
         // Get balance to calculate max transfer
@@ -719,7 +677,7 @@ const toolLogic: Record<string, any> = {
         }
       }
 
-      // Step 4: Execute transfer using existing tools
+      // Step 3: Execute transfer using existing tools
       console.log("✍️ Executing transfer to Ledger address...");
 
       let transferResult;
@@ -757,7 +715,7 @@ const toolLogic: Record<string, any> = {
         amount: transferAmount,
         network,
         tokenAddress,
-        ledgerDevice: device.name,
+        ledgerDevice: connectionData.deviceName,
         transferResult: JSON.parse(transferResult.content[0].text),
         message: `Funds security operation prepared. Ready to transfer ${
           tokenAddress ? "tokens" : "native currency"
@@ -773,86 +731,6 @@ const toolLogic: Record<string, any> = {
         error: error.message,
         message:
           "Fund security operation failed. Please ensure your Ledger device is connected and try again.",
-      };
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    }
-  },
-
-  // Disconnect from Ledger device
-  disconnectLedgerDevice: async ({ deviceId }: { deviceId: string }) => {
-    try {
-      await ledgerService.disconnectDevice(deviceId);
-
-      const result = {
-        success: true,
-        message: `Successfully disconnected from device: ${deviceId}`,
-      };
-
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    } catch (error: any) {
-      console.error("❌ Device disconnection failed:", error);
-      const result = {
-        success: false,
-        error: error.message,
-        message: "Device disconnection failed.",
-      };
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    }
-  },
-
-  // List connected Ledger devices
-  listConnectedLedgerDevices: async () => {
-    try {
-      const devices = ledgerService.getConnectedDevices();
-
-      const result = {
-        success: true,
-        devices,
-        count: devices.length,
-        message:
-          devices.length > 0
-            ? `${devices.length} device(s) currently connected`
-            : "No devices currently connected",
-      };
-
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    } catch (error: any) {
-      console.error("❌ Failed to list connected devices:", error);
-      const result = {
-        success: false,
-        error: error.message,
-        message: "Failed to list connected devices.",
-      };
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    }
-  },
-
-  // Open Ethereum app on connected Ledger device
-  openLedgerEthereumApp: async ({ deviceId }: { deviceId: string }) => {
-    try {
-      console.log(`📱 Opening Ethereum app on device: ${deviceId}`);
-
-      await ledgerService.openEthereumApp(deviceId);
-
-      const result = {
-        success: true,
-        message: `Ethereum app opened successfully on device: ${deviceId}`,
-      };
-
-      const text = JSON.stringify(result);
-      return { content: [{ type: "text", text }] };
-    } catch (error: any) {
-      console.error("❌ Failed to open Ethereum app:", error);
-      const result = {
-        success: false,
-        error: error.message,
-        message:
-          "Failed to open Ethereum app. Please ensure the device is connected and unlocked.",
       };
       const text = JSON.stringify(result);
       return { content: [{ type: "text", text }] };
@@ -1118,59 +996,12 @@ export const toolDefinitions = [
   // ==========================================
   {
     type: "function" as const,
-    name: "discoverLedgerDevices",
+    name: "connectToLedgerHardwareWallet",
     description:
-      "Discover available Ledger hardware wallet devices connected via USB or Bluetooth",
+      "Initiate the Ledger hardware wallet connection flow. This opens a modal that guides the user through the process of connecting their Ledger device.",
     parameters: {
       type: "object",
-      properties: {
-        timeout: {
-          type: "number",
-          description: "Discovery timeout in milliseconds (default: 10000)",
-        },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function" as const,
-    name: "connectLedgerDevice",
-    description: "Connect to a specific Ledger device using its device ID",
-    parameters: {
-      type: "object",
-      properties: {
-        deviceId: {
-          type: "string",
-          description: "ID of the Ledger device to connect to",
-        },
-      },
-      required: ["deviceId"],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function" as const,
-    name: "getLedgerEthereumAddress",
-    description: "Retrieve an Ethereum address from a connected Ledger device",
-    parameters: {
-      type: "object",
-      properties: {
-        deviceId: {
-          type: "string",
-          description: "ID of the connected Ledger device",
-        },
-        derivationPath: {
-          type: "string",
-          description:
-            "HD wallet derivation path (default: \"44'/60'/0'/0/0\")",
-        },
-        verify: {
-          type: "boolean",
-          description:
-            "Whether to verify address on device screen (default: false)",
-        },
-      },
-      required: ["deviceId"],
+      properties: {},
       additionalProperties: false,
     },
   },
@@ -1200,55 +1031,8 @@ export const toolDefinitions = [
           description:
             "Token contract address for ERC-20 transfers (optional - leave empty for native currency)",
         },
-        derivationPath: {
-          type: "string",
-          description:
-            "HD wallet derivation path (default: \"44'/60'/0'/0/0\")",
-        },
       },
       required: ["sourceAddress"],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function" as const,
-    name: "disconnectLedgerDevice",
-    description: "Disconnect from a specific Ledger device",
-    parameters: {
-      type: "object",
-      properties: {
-        deviceId: {
-          type: "string",
-          description: "ID of the Ledger device to disconnect",
-        },
-      },
-      required: ["deviceId"],
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function" as const,
-    name: "listConnectedLedgerDevices",
-    description: "List all currently connected Ledger devices",
-    parameters: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    },
-  },
-  {
-    type: "function" as const,
-    name: "openLedgerEthereumApp",
-    description: "Open the Ethereum app on a connected Ledger device",
-    parameters: {
-      type: "object",
-      properties: {
-        deviceId: {
-          type: "string",
-          description: "ID of the connected Ledger device",
-        },
-      },
-      required: ["deviceId"],
       additionalProperties: false,
     },
   },

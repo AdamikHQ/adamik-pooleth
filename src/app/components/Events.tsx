@@ -2,7 +2,6 @@
 
 import React, { useRef, useEffect } from "react";
 import { useEvent } from "@/app/contexts/EventContext";
-import { LoggedEvent } from "@/app/types";
 
 export interface EventsProps {
   isExpanded: boolean;

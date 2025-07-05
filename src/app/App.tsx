@@ -31,7 +31,7 @@ import { allAgentSets, defaultAgentSetKey } from "@/app/agentConfigs";
 
 import useAudioDownload from "./hooks/useAudioDownload";
 
-function App() {
+export default function App() {
   const searchParams = useSearchParams();
 
   // Privy authentication hooks
@@ -68,6 +68,13 @@ function App() {
   const [isOutputAudioBufferActive, setIsOutputAudioBufferActive] =
     useState<boolean>(false);
   const [manualDisconnect, setManualDisconnect] = useState(false);
+  const [ledgerConnectionInfo, setLedgerConnectionInfo] = useState<{
+    isConnected: boolean;
+    address?: string;
+    deviceName?: string;
+  }>({
+    isConnected: false,
+  });
 
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
@@ -76,12 +83,113 @@ function App() {
   // Initialize Ledger flow modal
   const {
     isModalOpen: isLedgerModalOpen,
-    startFlow: startLedgerFlow,
-    updateStep: updateLedgerStep,
-    completeStep: completeLedgerStep,
-    errorStep: errorLedgerStep,
+    handleComplete: handleLedgerCompleteDefault,
+    handleError: handleLedgerErrorDefault,
     closeModal: closeLedgerModal,
+    startFlow: startLedgerFlow,
   } = useLedgerFlow();
+
+  // Custom handlers to track Ledger connection state
+  const handleLedgerComplete = (result: any) => {
+    console.log("🎉 Ledger connection completed:", result);
+    if (result.success && result.address) {
+      setLedgerConnectionInfo({
+        isConnected: true,
+        address: result.address,
+        deviceName: result.deviceName || "Ledger Device",
+      });
+    }
+    handleLedgerCompleteDefault(result);
+  };
+
+  const handleLedgerError = (error: string) => {
+    console.log("❌ Ledger connection error:", error);
+    setLedgerConnectionInfo({
+      isConnected: false,
+    });
+    handleLedgerErrorDefault(error);
+  };
+
+  // Set up the global trigger function for the voice agent
+  useEffect(() => {
+    (window as any).__triggerLedgerModal = async () => {
+      console.log("🔐 Voice agent triggered Ledger modal");
+      console.log(
+        "🔗 Checking for __ledgerConnectionPromise:",
+        !!(window as any).__ledgerConnectionPromise
+      );
+
+      try {
+        console.log("🚀 Starting Ledger flow...");
+        // Access the current startLedgerFlow function directly to avoid stale closure
+        const result = await startLedgerFlow();
+        console.log("✅ Ledger flow completed with result:", result);
+
+        // Resolve the promise waiting in the voice agent
+        if ((window as any).__ledgerConnectionPromise) {
+          console.log(
+            `🎯 Found __ledgerConnectionPromise with ID: ${
+              (window as any).__ledgerConnectionPromise.id
+            }`
+          );
+          console.log("📤 Resolving voice agent promise with result:", result);
+          (window as any).__ledgerConnectionPromise.resolve(result);
+          console.log("✅ Voice agent promise resolved successfully");
+
+          // Clean up the timeout and promise after successful resolution
+          const timeoutId = (window as any).__ledgerConnectionPromise.timeoutId;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            console.log(
+              `⏰ Cleared timeout ${timeoutId} for successful promise resolution`
+            );
+          }
+          delete (window as any).__ledgerConnectionPromise;
+          console.log(
+            "🧹 Cleaned up __ledgerConnectionPromise after resolution"
+          );
+        } else {
+          console.error("❌ No __ledgerConnectionPromise found to resolve!");
+        }
+      } catch (error: any) {
+        console.error("❌ Ledger flow failed:", error);
+        // Reject the promise waiting in the voice agent
+        if ((window as any).__ledgerConnectionPromise) {
+          console.log(
+            `🎯 Found __ledgerConnectionPromise with ID: ${
+              (window as any).__ledgerConnectionPromise.id
+            }`
+          );
+          console.log(
+            "📤 Rejecting voice agent promise with error:",
+            error.message
+          );
+          (window as any).__ledgerConnectionPromise.reject(error);
+
+          // Clean up the timeout and promise after rejection
+          const timeoutId = (window as any).__ledgerConnectionPromise.timeoutId;
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            console.log(
+              `⏰ Cleared timeout ${timeoutId} for failed promise resolution`
+            );
+          }
+          delete (window as any).__ledgerConnectionPromise;
+          console.log(
+            "🧹 Cleaned up __ledgerConnectionPromise after rejection"
+          );
+        } else {
+          console.error("❌ No __ledgerConnectionPromise found to reject!");
+        }
+      }
+    };
+
+    // Cleanup on unmount (but don't clean up the promise here as it might be in use)
+    return () => {
+      delete (window as any).__triggerLedgerModal;
+      // Don't delete __ledgerConnectionPromise here as it causes timing issues
+    };
+  }, []); // Remove startLedgerFlow from dependencies to prevent premature cleanup
 
   // Get user's embedded wallet
   const userWallet = wallets.find(
@@ -192,121 +300,17 @@ function App() {
     }
   }, [authenticated]);
 
-  // Monitor transcript for Ledger operations and update modal
+  // Clear Ledger connection state when user logs out
   useEffect(() => {
-    const lastItem = transcriptItems[transcriptItems.length - 1];
-    if (!lastItem || lastItem.role !== "assistant") return;
-
-    // Check if the transcript item data contains function calls
-    const itemData = lastItem.data as any;
-    if (!itemData) return;
-
-    // Check for Ledger function calls in the data
-    if (itemData.function_calls) {
-      itemData.function_calls.forEach((call: any) => {
-        const isLedgerOperation = [
-          "discoverLedgerDevices",
-          "connectLedgerDevice",
-          "openLedgerEthereumApp",
-          "getLedgerEthereumAddress",
-          "secureFundsToLedger",
-        ].includes(call.name);
-
-        if (isLedgerOperation) {
-          // Start the flow if not already open
-          if (!isLedgerModalOpen && call.name === "discoverLedgerDevices") {
-            startLedgerFlow();
-          }
-
-          // Update step based on function call
-          switch (call.name) {
-            case "discoverLedgerDevices":
-              updateLedgerStep("discover", "in-progress");
-              break;
-            case "connectLedgerDevice":
-              completeLedgerStep("discover");
-              updateLedgerStep("connect", "in-progress");
-              break;
-            case "openLedgerEthereumApp":
-              completeLedgerStep("connect");
-              updateLedgerStep("open-app", "in-progress");
-              break;
-            case "getLedgerEthereumAddress":
-              completeLedgerStep("open-app");
-              updateLedgerStep("get-address", "in-progress");
-              break;
-          }
-        }
+    if (!authenticated) {
+      setLedgerConnectionInfo({
+        isConnected: false,
       });
     }
+  }, [authenticated]);
 
-    // Check for function call results
-    if (itemData.function_call_results) {
-      itemData.function_call_results.forEach((result: any) => {
-        const isLedgerResult = [
-          "discoverLedgerDevices",
-          "connectLedgerDevice",
-          "openLedgerEthereumApp",
-          "getLedgerEthereumAddress",
-          "secureFundsToLedger",
-        ].includes(result.name || "");
-
-        if (isLedgerResult) {
-          try {
-            const resultData =
-              typeof result.output === "string"
-                ? JSON.parse(result.output)
-                : result.output;
-            const success = resultData.success !== false;
-
-            // Update step based on result
-            switch (result.name) {
-              case "discoverLedgerDevices":
-                if (success) {
-                  completeLedgerStep("discover");
-                } else {
-                  errorLedgerStep("discover");
-                }
-                break;
-              case "connectLedgerDevice":
-                if (success) {
-                  completeLedgerStep("connect");
-                } else {
-                  errorLedgerStep("connect");
-                }
-                break;
-              case "openLedgerEthereumApp":
-                if (success) {
-                  completeLedgerStep("open-app");
-                } else {
-                  errorLedgerStep("open-app");
-                }
-                break;
-              case "getLedgerEthereumAddress":
-                if (success) {
-                  completeLedgerStep("get-address");
-                  // Auto-close modal after successful completion
-                  setTimeout(() => closeLedgerModal(), 2000);
-                } else {
-                  errorLedgerStep("get-address");
-                }
-                break;
-            }
-          } catch (error) {
-            console.warn("Failed to parse function call result:", error);
-          }
-        }
-      });
-    }
-  }, [
-    transcriptItems,
-    isLedgerModalOpen,
-    startLedgerFlow,
-    updateLedgerStep,
-    completeLedgerStep,
-    errorLedgerStep,
-    closeLedgerModal,
-  ]);
+  // The modal now handles all Ledger operations internally
+  // No need for transcript monitoring since the voice agent will trigger the modal directly
 
   const fetchEphemeralKey = async (): Promise<string | null> => {
     logClientEvent({ url: "/session" }, "fetch_session_token_request");
@@ -568,12 +572,12 @@ function App() {
     }
   };
 
-  const handleAgentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newAgentConfig = e.target.value;
-    const url = new URL(window.location.toString());
-    url.searchParams.set("agentConfig", newAgentConfig);
-    window.location.replace(url.toString());
-  };
+  // const handleAgentChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  //   const newAgentConfig = e.target.value;
+  //   const url = new URL(window.location.toString());
+  //   url.searchParams.set("agentConfig", newAgentConfig);
+  //   window.location.replace(url.toString());
+  // };
 
   // const handleSelectedAgentChange = (
   //   e: React.ChangeEvent<HTMLSelectElement>
@@ -642,7 +646,7 @@ function App() {
     };
   }, [sessionStatus]);
 
-  const agentSetKey = searchParams.get("agentConfig") || "default";
+  // const agentSetKey = searchParams.get("agentConfig") || "default";
 
   // Show loading while Privy initializes
   if (!ready) {
@@ -750,7 +754,24 @@ function App() {
               )}
               {userWallet && (
                 <div className="flex items-center space-x-2 text-xs text-gray-500 font-mono">
-                  <span>{userWallet.address}</span>
+                  {/* Privy Wallet Address with Logo */}
+                  <div className="flex items-center space-x-1.5">
+                    <Image
+                      src="/Privy_Symbol_Black.png"
+                      alt="Privy"
+                      width={16}
+                      height={16}
+                      className="h-4 w-4 object-contain"
+                    />
+                    <span className="text-gray-600 font-medium">Privy</span>
+                  </div>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-gray-500">
+                    {`${userWallet.address.slice(
+                      0,
+                      6
+                    )}...${userWallet.address.slice(-4)}`}
+                  </span>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(userWallet.address);
@@ -764,10 +785,74 @@ function App() {
                       }, 1000);
                     }}
                     className="p-1 hover:bg-gray-100 rounded transition-colors"
-                    title="Copy address"
+                    title="Copy Privy address"
                   >
                     <svg
-                      className="w-3 h-3"
+                      className="w-3 h-3 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              )}
+
+              {/* Ledger Connection Indicator */}
+              {ledgerConnectionInfo.isConnected && (
+                <div className="flex items-center space-x-2 text-xs text-green-600 font-mono mt-1">
+                  <div className="flex items-center space-x-1.5">
+                    <div className="relative flex items-center">
+                      <Image
+                        src="/ledger_horizontal.svg"
+                        alt="Ledger"
+                        width={32}
+                        height={16}
+                        className="h-4 w-auto object-contain"
+                      />
+                      {/* Green connection dot */}
+                      <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full border border-white shadow-sm"></div>
+                    </div>
+                    <span className="text-green-700 font-medium">
+                      {ledgerConnectionInfo.deviceName}
+                    </span>
+                  </div>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-green-600">
+                    {ledgerConnectionInfo.address
+                      ? `${ledgerConnectionInfo.address.slice(
+                          0,
+                          6
+                        )}...${ledgerConnectionInfo.address.slice(-4)}`
+                      : ledgerConnectionInfo.address}
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (ledgerConnectionInfo.address) {
+                        navigator.clipboard.writeText(
+                          ledgerConnectionInfo.address
+                        );
+                        // Simple feedback - you could add a toast notification here
+                        const button =
+                          document.activeElement as HTMLButtonElement;
+                        const originalText = button.textContent;
+                        button.textContent = "✓";
+                        setTimeout(() => {
+                          button.textContent = originalText;
+                        }, 1000);
+                      }
+                    }}
+                    className="p-1 hover:bg-green-50 rounded transition-colors"
+                    title="Copy Ledger address"
+                  >
+                    <svg
+                      className="w-3 h-3 text-green-600"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -827,14 +912,9 @@ function App() {
       <LedgerFlowModal
         isOpen={isLedgerModalOpen}
         onClose={closeLedgerModal}
-        onRetry={() => {
-          // Reset the modal and start fresh
-          closeLedgerModal();
-          setTimeout(() => startLedgerFlow(), 100);
-        }}
+        onComplete={handleLedgerComplete}
+        onError={handleLedgerError}
       />
     </div>
   );
 }
-
-export default App;

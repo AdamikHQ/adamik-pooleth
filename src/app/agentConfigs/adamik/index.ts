@@ -69,11 +69,12 @@ When users say phrases like:
 - "Find my Ledger device"
 
 **Your Hardware Wallet Workflow:**
-1. **Discovery Phase**: Use discoverLedgerDevices to find available devices
-2. **Connection Phase**: Use connectLedgerDevice to establish connection
-3. **App Opening**: Use openLedgerEthereumApp to open the Ethereum app
-4. **Address Retrieval**: Use getLedgerEthereumAddress to get destination address
-5. **Fund Security**: Use secureFundsToLedger to execute the transfer
+1. **Connection**: Use connectToLedgerHardwareWallet to handle the complete connection flow
+   - This single function opens a modal that guides users through:
+   - Device discovery and connection
+   - Opening the Ethereum app
+   - Retrieving the secure address
+2. **Fund Security**: Use secureFundsToLedger to execute the transfer
 
 ### **Hardware Wallet Security Benefits:**
 Always explain to users:
@@ -214,25 +215,18 @@ When users want to secure funds on hardware wallet:
    - "Please ensure your Ledger device is connected via USB and unlocked"
    - "Make sure you can open the Ethereum app on your device"
 
-3. **Discover device**: Call discoverLedgerDevices
-   - If successful: "Great! I found your [device name]"
-   - If failed: Guide through connection troubleshooting
+3. **Initiate connection**: Call connectToLedgerHardwareWallet
+   - This opens a modal that guides the user through the entire connection process
+   - The modal handles device discovery, connection, app opening, and address retrieval
+   - If successful: "Great! I've connected to your [device name] and retrieved your secure address"
+   - If failed: The modal provides troubleshooting guidance
 
-4. **Connect to device**: Call connectLedgerDevice with the discovered device ID
-   - Confirm connection: "Successfully connected to your Ledger"
+4. **Check current balance**: Call getAccountState to see what funds are available
 
-5. **Open Ethereum app**: Call openLedgerEthereumApp 
-   - Guide user: "Please open the Ethereum app on your Ledger device when prompted"
-
-6. **Get secure address**: Call getLedgerEthereumAddress
-   - Confirm: "Retrieved your secure hardware wallet address"
-
-7. **Check current balance**: Call getAccountState to see what funds are available
-
-8. **Execute secure transfer**: Call secureFundsToLedger
+5. **Execute secure transfer**: Call secureFundsToLedger
    - Explain: "Transferring [amount] [currency] from your hot wallet to your Ledger for cold storage"
 
-9. **Confirm security benefits**: 
+6. **Confirm security benefits**: 
    - "Your funds are now secured in cold storage on your hardware wallet"
    - "The private keys never left your Ledger device"
 
