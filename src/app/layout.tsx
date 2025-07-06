@@ -19,27 +19,31 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <title>Adamik Agent</title>
-        <meta name="description" content="A demo app from Adamik." />
+        <title>Pooleth - Your Egg-celent Crypto CFO</title>
+        <meta
+          name="description"
+          content="Voice-powered crypto portfolio management for ETH Global Cannes 2025."
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Handle wallet extension conflicts before app loads
+              // Handle wallet extension conflicts gracefully
               (function() {
-                if (typeof window !== 'undefined' && window.ethereum) {
-                  const originalEthereum = window.ethereum;
-                  
-                  // Prevent redefinition errors
-                  try {
-                    Object.defineProperty(window, 'ethereum', {
-                      value: originalEthereum,
-                      writable: false,
-                      configurable: false
-                    });
-                  } catch (e) {
-                    // Property already defined, continue gracefully
-                    console.log('Ethereum provider already configured');
-                  }
+                // Allow extensions to compete naturally, Privy will handle provider selection
+                if (typeof window !== 'undefined') {
+                  // Just log conflicts without preventing them
+                  const originalDefineProperty = Object.defineProperty;
+                  Object.defineProperty = function(obj, prop, descriptor) {
+                    if (obj === window && prop === 'ethereum') {
+                      try {
+                        return originalDefineProperty.call(this, obj, prop, descriptor);
+                      } catch (e) {
+                        console.log('Multiple wallet extensions detected - Privy will handle provider selection');
+                        return obj[prop]; // Return existing value
+                      }
+                    }
+                    return originalDefineProperty.call(this, obj, prop, descriptor);
+                  };
                 }
               })();
             `,
