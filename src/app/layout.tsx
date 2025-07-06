@@ -27,29 +27,53 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Silence wallet extension conflicts - Privy will handle provider selection
+              // Comprehensive wallet extension conflict prevention
               (function() {
-                if (typeof window !== 'undefined') {
-                  // Catch all wallet extension errors and silence them
-                  const originalError = window.onerror;
-                  window.onerror = function(message, source, lineno, colno, error) {
-                    // Silence common wallet extension conflicts
-                    if (typeof message === 'string' && (
+                // Set up error silencing IMMEDIATELY
+                window.addEventListener('error', function(event) {
+                  const message = event.message || '';
+                  const source = event.filename || '';
+                  if (message.includes('Cannot set property ethereum') || 
                       message.includes('Cannot redefine property: ethereum') ||
-                      message.includes('Cannot set property ethereum') ||
                       message.includes('which has only a getter') ||
-                      source.includes('chrome-extension://') && message.includes('ethereum')
-                    )) {
-                      console.log('Wallet extension conflict silenced - Privy will handle provider selection');
-                      return true; // Prevents the error from showing in console
-                    }
-                    // Call original error handler for other errors
-                    if (originalError) {
-                      return originalError.call(this, message, source, lineno, colno, error);
-                    }
+                      (source.includes('chrome-extension://') && message.includes('ethereum'))) {
+                    console.log('🔇 Wallet extension conflict silenced');
+                    event.preventDefault();
+                    event.stopPropagation();
                     return false;
-                  };
-                }
+                  }
+                }, true);
+
+                // Also handle unhandled promise rejections from extensions
+                window.addEventListener('unhandledrejection', function(event) {
+                  const reason = event.reason?.message || event.reason || '';
+                  if (typeof reason === 'string' && (
+                    reason.includes('Cannot set property ethereum') ||
+                    reason.includes('Cannot redefine property: ethereum') ||
+                    reason.includes('which has only a getter')
+                  )) {
+                    console.log('🔇 Wallet extension promise rejection silenced');
+                    event.preventDefault();
+                  }
+                });
+
+                // Legacy onerror as backup
+                const originalError = window.onerror;
+                window.onerror = function(message, source, lineno, colno, error) {
+                  if (typeof message === 'string' && (
+                    message.includes('Cannot set property ethereum') ||
+                    message.includes('Cannot redefine property: ethereum') ||
+                    message.includes('which has only a getter') ||
+                    (source && source.includes('chrome-extension://') && message.includes('ethereum'))
+                  )) {
+                    console.log('🔇 Wallet extension error silenced (onerror)');
+                    return true;
+                  }
+                  if (originalError) {
+                    return originalError.call(this, message, source, lineno, colno, error);
+                  }
+                  return false;
+                };
               })();
             `,
           }}
