@@ -27,22 +27,27 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Handle wallet extension conflicts gracefully
+              // Silence wallet extension conflicts - Privy will handle provider selection
               (function() {
-                // Allow extensions to compete naturally, Privy will handle provider selection
                 if (typeof window !== 'undefined') {
-                  // Just log conflicts without preventing them
-                  const originalDefineProperty = Object.defineProperty;
-                  Object.defineProperty = function(obj, prop, descriptor) {
-                    if (obj === window && prop === 'ethereum') {
-                      try {
-                        return originalDefineProperty.call(this, obj, prop, descriptor);
-                      } catch (e) {
-                        console.log('Multiple wallet extensions detected - Privy will handle provider selection');
-                        return obj[prop]; // Return existing value
-                      }
+                  // Catch all wallet extension errors and silence them
+                  const originalError = window.onerror;
+                  window.onerror = function(message, source, lineno, colno, error) {
+                    // Silence common wallet extension conflicts
+                    if (typeof message === 'string' && (
+                      message.includes('Cannot redefine property: ethereum') ||
+                      message.includes('Cannot set property ethereum') ||
+                      message.includes('which has only a getter') ||
+                      source.includes('chrome-extension://') && message.includes('ethereum')
+                    )) {
+                      console.log('Wallet extension conflict silenced - Privy will handle provider selection');
+                      return true; // Prevents the error from showing in console
                     }
-                    return originalDefineProperty.call(this, obj, prop, descriptor);
+                    // Call original error handler for other errors
+                    if (originalError) {
+                      return originalError.call(this, message, source, lineno, colno, error);
+                    }
+                    return false;
                   };
                 }
               })();
