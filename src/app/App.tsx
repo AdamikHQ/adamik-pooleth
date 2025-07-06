@@ -13,7 +13,14 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import Transcript from "./components/Transcript";
 import Events from "./components/Events";
 import BottomToolbar from "./components/BottomToolbar";
-import { LedgerFlowModal, useLedgerFlow } from "./components/LedgerFlowModal";
+import {
+  LedgerGetAddressModal,
+  useLedgerGetAddress,
+} from "./components/LedgerGetAddressModal";
+import {
+  LedgerSignTransactionModal,
+  useLedgerSignTransaction,
+} from "./components/LedgerSignTransactionModal";
 import {
   TransactionReviewModal,
   useTransactionReview,
@@ -89,19 +96,30 @@ export default function App() {
   }>({
     isConnected: false,
   });
+  const [currentTransactionToSign, setCurrentTransactionToSign] =
+    useState<any>(null);
 
   // Initialize the recording hook.
   const { startRecording, stopRecording, downloadRecording } =
     useAudioDownload();
 
-  // Initialize Ledger flow modal
+  // Initialize Ledger address modal
   const {
-    isModalOpen: isLedgerModalOpen,
+    isModalOpen: isLedgerGetAddressModalOpen,
     handleComplete: handleLedgerCompleteDefault,
     handleError: handleLedgerErrorDefault,
     closeModal: closeLedgerModal,
-    startFlow: startLedgerFlow,
-  } = useLedgerFlow();
+    getAddress: startLedgerFlow,
+  } = useLedgerGetAddress();
+
+  // Initialize Ledger transaction signing modal
+  const {
+    isModalOpen: isLedgerSignModalOpen,
+    signTransaction: startLedgerSignTransaction,
+    closeModal: closeLedgerSignModal,
+    handleComplete: handleLedgerSignCompleteDefault,
+    handleError: handleLedgerSignErrorDefault,
+  } = useLedgerSignTransaction();
 
   // Initialize Transaction Review modal
   const {
@@ -132,6 +150,24 @@ export default function App() {
       isConnected: false,
     });
     handleLedgerErrorDefault(error);
+  };
+
+  // Custom handlers for Ledger transaction signing
+  const handleLedgerSignComplete = (result: any) => {
+    console.log("🎉 Ledger transaction signing completed:", result);
+    if (result.success && result.signedTransaction) {
+      console.log(
+        "✅ Transaction signed successfully:",
+        result.signedTransaction
+      );
+      // You can add additional logic here, like broadcasting the transaction
+    }
+    handleLedgerSignCompleteDefault(result);
+  };
+
+  const handleLedgerSignError = (error: string) => {
+    console.log("❌ Ledger transaction signing error:", error);
+    handleLedgerSignErrorDefault(error);
   };
 
   // Set up the global trigger function for the voice agent
@@ -170,10 +206,30 @@ export default function App() {
       });
     };
 
+    // Set up global Ledger transaction signing trigger
+    (window as any).__triggerLedgerSignTransaction = (transactionData: any) => {
+      console.log("✍️ APP: Voice agent triggered Ledger transaction signing");
+      console.log("📋 APP: Transaction data:", transactionData);
+      console.log(
+        "🔗 APP: Checking for __ledgerSignPromise:",
+        !!(window as any).__ledgerSignPromise
+      );
+
+      // Store the transaction data for the modal
+      setCurrentTransactionToSign(transactionData);
+
+      // Open Ledger signing modal
+      console.log("🚀 APP: Opening Ledger signing modal...");
+      startLedgerSignTransaction(transactionData).catch((error) => {
+        console.error("❌ APP: Failed to start Ledger signing:", error);
+      });
+    };
+
     // Cleanup on unmount (but don't clean up the promises here as they might be in use)
     return () => {
       delete (window as any).__triggerLedgerModal;
       delete (window as any).__triggerTransactionModal;
+      delete (window as any).__triggerLedgerSignTransaction;
       // Don't delete promises here as it causes timing issues
     };
   }, []); // Remove dependencies to prevent premature cleanup
@@ -951,9 +1007,9 @@ export default function App() {
         setIsAudioPlaybackEnabled={setIsAudioPlaybackEnabled}
       />
 
-      {/* Ledger Hardware Wallet Flow Modal */}
-      <LedgerFlowModal
-        isOpen={isLedgerModalOpen}
+      {/* Ledger Hardware Wallet Address Modal */}
+      <LedgerGetAddressModal
+        isOpen={isLedgerGetAddressModalOpen}
         onClose={closeLedgerModal}
         onComplete={handleLedgerComplete}
         onError={handleLedgerError}
@@ -967,6 +1023,21 @@ export default function App() {
         onConfirm={handleTransactionComplete}
         onError={handleTransactionError}
       />
+
+      {/* Ledger Transaction Signing Modal */}
+      {currentTransactionToSign && (
+        <LedgerSignTransactionModal
+          isOpen={isLedgerSignModalOpen}
+          onClose={() => {
+            closeLedgerSignModal();
+            setCurrentTransactionToSign(null);
+          }}
+          transaction={currentTransactionToSign}
+          derivationPath="44'/60'/0'/0/0"
+          onComplete={handleLedgerSignComplete}
+          onError={handleLedgerSignError}
+        />
+      )}
     </div>
   );
 }

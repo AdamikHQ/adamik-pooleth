@@ -11,14 +11,14 @@ interface LedgerStep {
   icon: string;
 }
 
-interface LedgerFlowModalProps {
+interface LedgerGetAddressModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete?: (result: LedgerConnectionResult) => void;
+  onComplete?: (result: LedgerAddressResult) => void;
   onError?: (error: string) => void;
 }
 
-interface LedgerConnectionResult {
+interface LedgerAddressResult {
   success: boolean;
   address?: string;
   publicKey?: string;
@@ -59,17 +59,17 @@ const INITIAL_STEPS: LedgerStep[] = [
   },
 ];
 
-export function LedgerFlowModal({
+export function LedgerGetAddressModal({
   isOpen,
   onClose,
   onComplete,
   onError,
-}: LedgerFlowModalProps) {
+}: LedgerGetAddressModalProps) {
   const [steps, setSteps] = useState<LedgerStep[]>(INITIAL_STEPS);
   const [currentStep, setCurrentStep] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [result, setResult] = useState<LedgerConnectionResult | null>(null);
+  const [result, setResult] = useState<LedgerAddressResult | null>(null);
   const [showRetryOptions, setShowRetryOptions] = useState(false);
 
   // Use ref to track if flow is active to prevent race conditions
@@ -78,7 +78,7 @@ export function LedgerFlowModal({
 
   // Complete reset function
   const resetModalState = () => {
-    console.log("🔄 Resetting modal state completely");
+    console.log("🔄 Resetting address modal state completely");
 
     // Clear any existing timeouts
     if (timeoutRef.current) {
@@ -100,33 +100,33 @@ export function LedgerFlowModal({
     // when we actually resolve/reject it, not during modal reset.
 
     // Only clean up hook-specific promises
-    if ((window as any).__ledgerHookPromise) {
-      delete (window as any).__ledgerHookPromise;
+    if ((window as any).__ledgerAddressHookPromise) {
+      delete (window as any).__ledgerAddressHookPromise;
     }
   };
 
   // Reset when modal opens
   useEffect(() => {
     if (isOpen && !flowActiveRef.current) {
-      console.log("📂 MODAL: Modal opening, checking global state...");
+      console.log("📂 ADDRESS MODAL: Modal opening, checking global state...");
       console.log(
-        "🔍 MODAL: __ledgerConnectionPromise exists:",
+        "🔍 ADDRESS MODAL: __ledgerConnectionPromise exists:",
         !!(window as any).__ledgerConnectionPromise
       );
       console.log(
-        "🔍 MODAL: __ledgerConnectionPromise details:",
+        "🔍 ADDRESS MODAL: __ledgerConnectionPromise details:",
         (window as any).__ledgerConnectionPromise
       );
       console.log(
-        "🔍 MODAL: __ledgerHookPromise exists:",
-        !!(window as any).__ledgerHookPromise
+        "🔍 ADDRESS MODAL: __ledgerAddressHookPromise exists:",
+        !!(window as any).__ledgerAddressHookPromise
       );
 
       resetModalState();
       // Start flow after a short delay to ensure clean state
       setTimeout(() => {
         if (isOpen) {
-          startFlow();
+          startAddressFlow();
         }
       }, 100);
     } else if (!isOpen) {
@@ -142,7 +142,7 @@ export function LedgerFlowModal({
         console.log("🧹 UNMOUNT: Cleaning up supervisor promise");
         try {
           (window as any).__ledgerConnectionPromise.reject(
-            new Error("Modal unmounted")
+            new Error("Address modal unmounted")
           );
         } catch (e) {
           console.warn("Failed to reject supervisor promise on unmount:", e);
@@ -150,16 +150,16 @@ export function LedgerFlowModal({
         delete (window as any).__ledgerConnectionPromise;
       }
 
-      if ((window as any).__ledgerHookPromise) {
-        console.log("🧹 UNMOUNT: Cleaning up hook promise");
+      if ((window as any).__ledgerAddressHookPromise) {
+        console.log("🧹 UNMOUNT: Cleaning up address hook promise");
         try {
-          (window as any).__ledgerHookPromise.reject(
-            new Error("Modal unmounted")
+          (window as any).__ledgerAddressHookPromise.reject(
+            new Error("Address modal unmounted")
           );
         } catch (e) {
-          console.warn("Failed to reject hook promise on unmount:", e);
+          console.warn("Failed to reject address hook promise on unmount:", e);
         }
-        delete (window as any).__ledgerHookPromise;
+        delete (window as any).__ledgerAddressHookPromise;
       }
 
       // Reset other state
@@ -201,13 +201,13 @@ export function LedgerFlowModal({
   };
 
   const handleSuccess = (addressInfo: any, device: any) => {
-    console.log("✅ Ledger connection successful!");
+    console.log("✅ Ledger address retrieval successful!");
     console.log("📍 Address info:", addressInfo);
     console.log("📱 Device info:", device);
 
     updateStep("get-address", "completed");
 
-    const connectionResult: LedgerConnectionResult = {
+    const addressResult: LedgerAddressResult = {
       success: true,
       address: addressInfo.address,
       publicKey: addressInfo.publicKey,
@@ -216,8 +216,8 @@ export function LedgerFlowModal({
       deviceName: device.name,
     };
 
-    console.log("🎯 Connection result:", connectionResult);
-    setResult(connectionResult);
+    console.log("🎯 Address result:", addressResult);
+    setResult(addressResult);
     setIsProcessing(false);
     flowActiveRef.current = false;
 
@@ -232,8 +232,8 @@ export function LedgerFlowModal({
       (window as any).__ledgerConnectionPromise
     );
     console.log(
-      "  __ledgerHookPromise exists:",
-      !!(window as any).__ledgerHookPromise
+      "  __ledgerAddressHookPromise exists:",
+      !!(window as any).__ledgerAddressHookPromise
     );
 
     // Send to global promise handler
@@ -254,7 +254,7 @@ export function LedgerFlowModal({
       }
 
       try {
-        (window as any).__ledgerConnectionPromise.resolve(connectionResult);
+        (window as any).__ledgerConnectionPromise.resolve(addressResult);
         console.log("✅ Main promise resolved successfully");
       } catch (error) {
         console.error("❌ Error resolving main promise:", error);
@@ -269,20 +269,20 @@ export function LedgerFlowModal({
     }
 
     // Also resolve hook promise if it exists
-    if ((window as any).__ledgerHookPromise) {
-      console.log("🔗 Resolving hook promise...");
+    if ((window as any).__ledgerAddressHookPromise) {
+      console.log("🔗 Resolving address hook promise...");
       try {
-        (window as any).__ledgerHookPromise.resolve(connectionResult);
-        console.log("✅ Hook promise resolved successfully");
+        (window as any).__ledgerAddressHookPromise.resolve(addressResult);
+        console.log("✅ Address hook promise resolved successfully");
       } catch (error) {
-        console.error("❌ Error resolving hook promise:", error);
+        console.error("❌ Error resolving address hook promise:", error);
       }
-      delete (window as any).__ledgerHookPromise;
-      console.log("🧹 Hook promise cleaned up");
+      delete (window as any).__ledgerAddressHookPromise;
+      console.log("🧹 Address hook promise cleaned up");
     }
 
     // Send to callback
-    onComplete?.(connectionResult);
+    onComplete?.(addressResult);
 
     // Auto-close after 2 seconds
     timeoutRef.current = setTimeout(() => {
@@ -293,7 +293,7 @@ export function LedgerFlowModal({
   };
 
   const handleError = (error: string, stepId?: string) => {
-    console.error("❌ Ledger flow error:", error);
+    console.error("❌ Ledger address retrieval error:", error);
     console.error("🔍 Failed step:", stepId);
 
     if (stepId) {
@@ -323,24 +323,24 @@ export function LedgerFlowModal({
     }
 
     // Also reject hook promise if it exists
-    if ((window as any).__ledgerHookPromise) {
-      console.log("🔗 Rejecting hook promise...");
-      (window as any).__ledgerHookPromise.reject(new Error(error));
-      delete (window as any).__ledgerHookPromise;
-      console.log("❌ Hook promise rejected and cleaned up");
+    if ((window as any).__ledgerAddressHookPromise) {
+      console.log("🔗 Rejecting address hook promise...");
+      (window as any).__ledgerAddressHookPromise.reject(new Error(error));
+      delete (window as any).__ledgerAddressHookPromise;
+      console.log("❌ Address hook promise rejected and cleaned up");
     }
 
     // Send to callback
     onError?.(error);
   };
 
-  const startFlow = async () => {
+  const startAddressFlow = async () => {
     if (flowActiveRef.current || isProcessing) {
-      console.log("⚠️ Flow already active, skipping");
+      console.log("⚠️ Address flow already active, skipping");
       return;
     }
 
-    console.log("🚀 Starting Ledger connection flow");
+    console.log("🚀 Starting Ledger address retrieval flow");
 
     flowActiveRef.current = true;
     setIsProcessing(true);
@@ -394,7 +394,7 @@ export function LedgerFlowModal({
 
       handleSuccess(addressInfo, device);
     } catch (error: any) {
-      console.error("❌ Flow failed:", error);
+      console.error("❌ Address flow failed:", error);
 
       // Determine which step failed
       const failedStep = currentStep || "discover";
@@ -403,13 +403,13 @@ export function LedgerFlowModal({
   };
 
   const handleRetry = () => {
-    console.log("🔄 Retrying flow...");
+    console.log("🔄 Retrying address flow...");
     resetModalState();
 
     // Start flow after a brief delay
     setTimeout(() => {
       if (isOpen) {
-        startFlow();
+        startAddressFlow();
       }
     }, 500);
   };
@@ -493,7 +493,7 @@ export function LedgerFlowModal({
                   Connect Ledger
                 </h2>
                 <p className="text-sm text-gray-500">
-                  Secure hardware wallet connection
+                  Get address from hardware wallet
                 </p>
               </div>
             </div>
@@ -635,13 +635,13 @@ export function LedgerFlowModal({
   );
 }
 
-// Simplified hook
-export function useLedgerFlow() {
+// Hook for getting address
+export function useLedgerGetAddress() {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [result, setResult] = useState<LedgerConnectionResult | null>(null);
+  const [result, setResult] = useState<LedgerAddressResult | null>(null);
 
-  const startFlow = (): Promise<LedgerConnectionResult> => {
-    console.log("🎬 Starting Ledger flow via hook");
+  const getAddress = (): Promise<LedgerAddressResult> => {
+    console.log("🎬 Starting Ledger address retrieval via hook");
     console.log(
       "🔍 Existing promise check:",
       !!(window as any).__ledgerConnectionPromise
@@ -650,16 +650,16 @@ export function useLedgerFlow() {
     // Always create our own promise for the hook, but don't overwrite supervisor promise
     return new Promise((resolve, reject) => {
       // Store hook resolvers separately so we can notify the hook caller
-      (window as any).__ledgerHookPromise = { resolve, reject };
-      console.log("🔗 Hook promise stored");
+      (window as any).__ledgerAddressHookPromise = { resolve, reject };
+      console.log("🔗 Address hook promise stored");
 
       // If no supervisor promise exists, also create the main promise
       if (!(window as any).__ledgerConnectionPromise) {
-        console.log("🔗 Creating main promise for hook-only flow");
+        console.log("🔗 Creating main promise for hook-only address flow");
         (window as any).__ledgerConnectionPromise = {
           resolve,
           reject,
-          id: "hook-" + Math.random().toString(36).substr(2, 9),
+          id: "address-hook-" + Math.random().toString(36).substr(2, 9),
         };
       } else {
         console.log("🔗 Using existing supervisor promise");
@@ -668,7 +668,7 @@ export function useLedgerFlow() {
       // Open modal
       setIsModalOpen(true);
       setResult(null);
-      console.log("📂 Modal opened, waiting for user interaction");
+      console.log("📂 Address modal opened, waiting for user interaction");
     });
   };
 
@@ -683,30 +683,32 @@ export function useLedgerFlow() {
       }
 
       (window as any).__ledgerConnectionPromise.reject(
-        new Error("Modal closed")
+        new Error("Address modal closed")
       );
       delete (window as any).__ledgerConnectionPromise;
     }
 
     // Also clean up hook promise if it exists
-    if ((window as any).__ledgerHookPromise) {
-      (window as any).__ledgerHookPromise.reject(new Error("Modal closed"));
-      delete (window as any).__ledgerHookPromise;
+    if ((window as any).__ledgerAddressHookPromise) {
+      (window as any).__ledgerAddressHookPromise.reject(
+        new Error("Address modal closed")
+      );
+      delete (window as any).__ledgerAddressHookPromise;
     }
   };
 
-  const handleComplete = (result: LedgerConnectionResult) => {
+  const handleComplete = (result: LedgerAddressResult) => {
     setResult(result);
   };
 
   const handleError = (error: string) => {
-    console.error("Hook received error:", error);
+    console.error("Hook received address error:", error);
   };
 
   return {
     isModalOpen,
     result,
-    startFlow,
+    getAddress,
     closeModal,
     handleComplete,
     handleError,

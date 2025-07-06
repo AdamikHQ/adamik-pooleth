@@ -15,6 +15,7 @@ import {
   type SignerEth,
   SignerEthBuilder,
 } from "@ledgerhq/device-signer-kit-ethereum";
+import * as ethers from "ethers";
 
 interface LedgerDevice {
   id: string;
@@ -30,6 +31,28 @@ interface LedgerAddress {
   publicKey: string;
   derivationPath: string;
   chainCode?: string;
+}
+
+interface EthereumTransaction {
+  to: string;
+  value: string;
+  data?: string;
+  gasLimit: string;
+  gasPrice?: string;
+  maxFeePerGas?: string;
+  maxPriorityFeePerGas?: string;
+  nonce: string;
+  chainId: number;
+}
+
+interface SignedTransaction {
+  rawTransaction: string;
+  signature: {
+    r: string;
+    s: string;
+    v: string;
+  };
+  hash: string;
 }
 
 class LedgerService {
@@ -494,6 +517,209 @@ class LedgerService {
   }
 
   /**
+   * Sign an Ethereum transaction on any EVM-compatible chain
+   */
+  async signEthereumTransaction(
+    deviceId: string,
+    transaction: EthereumTransaction,
+    derivationPath: string = "44'/60'/0'/0/0"
+  ): Promise<SignedTransaction> {
+    const device = this.connectedDevices.get(deviceId);
+    if (!device || !device.sessionId) {
+      throw new Error(`Device not connected: ${deviceId}`);
+    }
+
+    console.log(`📝 Signing Ethereum transaction on device: ${device.name}`);
+    console.log(`🛣️ Using derivation path: ${derivationPath}`);
+    console.log(`⛓️ Chain ID: ${transaction.chainId}`);
+
+    // Ensure Ethereum signer is initialized for this session
+    if (!this.ethSigner || this.currentSessionId !== device.sessionId) {
+      console.log(
+        "🔧 Initializing Ethereum signer for session:",
+        device.sessionId
+      );
+      this.initializeEthereumSigner(device.sessionId);
+    }
+
+    if (!this.ethSigner) {
+      throw new Error("Ethereum signer not initialized");
+    }
+
+    try {
+      console.log("🚀 Calling ethSigner.signTransaction()...");
+
+      // Prepare transaction object for ethers
+      const txData = {
+        to: transaction.to,
+        value: transaction.value,
+        data: transaction.data || "0x",
+        gasLimit: transaction.gasLimit,
+        gasPrice: transaction.gasPrice,
+        maxFeePerGas: transaction.maxFeePerGas,
+        maxPriorityFeePerGas: transaction.maxPriorityFeePerGas,
+        nonce: transaction.nonce,
+        chainId: transaction.chainId,
+      };
+
+      // Remove undefined fields to avoid issues
+      const cleanedTxData = Object.fromEntries(
+        Object.entries(txData).filter(([, value]) => value !== undefined)
+      );
+
+      console.log("📄 Transaction data:", cleanedTxData);
+
+      // Create ethers transaction and serialize it to raw bytes
+      const ethersTransaction = new ethers.Transaction();
+      ethersTransaction.to = cleanedTxData.to as string;
+      ethersTransaction.value = cleanedTxData.value as string;
+      ethersTransaction.data = cleanedTxData.data as string;
+      ethersTransaction.gasLimit = cleanedTxData.gasLimit as string;
+      ethersTransaction.nonce = cleanedTxData.nonce as string;
+      ethersTransaction.chainId = cleanedTxData.chainId as number;
+
+      if (cleanedTxData.gasPrice) {
+        ethersTransaction.gasPrice = cleanedTxData.gasPrice as string;
+      }
+      if (cleanedTxData.maxFeePerGas) {
+        ethersTransaction.maxFeePerGas = cleanedTxData.maxFeePerGas as string;
+      }
+      if (cleanedTxData.maxPriorityFeePerGas) {
+        ethersTransaction.maxPriorityFeePerGas =
+          cleanedTxData.maxPriorityFeePerGas as string;
+      }
+
+      // Get the raw serialized transaction as Uint8Array
+      const serializedTx = ethersTransaction.unsignedSerialized;
+      const rawTxBytes = new Uint8Array(ethers.getBytes(serializedTx));
+
+      console.log("📄 Serialized transaction:", ethers.hexlify(rawTxBytes));
+
+      // Use the Ethereum signer to sign the transaction
+      const result = this.ethSigner.signTransaction(
+        derivationPath,
+        rawTxBytes,
+        {
+          skipOpenApp: true, // App should already be open
+        }
+      );
+
+      console.log("📡 Observable created, waiting for signing results...");
+
+      // Wait for the completed state by subscribing to the observable
+      return new Promise((resolve, reject) => {
+        let timeoutId: NodeJS.Timeout | null = null;
+        let isResolved = false;
+
+        const cleanup = () => {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = null;
+          }
+          isResolved = true;
+        };
+
+        // Set timeout for transaction signing
+        timeoutId = setTimeout(() => {
+          if (!isResolved) {
+            cleanup();
+            console.error("⏰ Transaction signing timeout");
+            reject(
+              new Error(
+                "Transaction signing timeout - please ensure device is responsive and transaction is confirmed"
+              )
+            );
+          }
+        }, 120000); // 2 minute timeout for transaction signing
+
+        const subscription = result.observable.subscribe({
+          next: (state) => {
+            console.log(
+              "📊 Ledger signTransaction state:",
+              state.status,
+              state
+            );
+
+            if (state.status === DeviceActionStatus.Completed && !isResolved) {
+              cleanup();
+              const output = state.output;
+              console.log(
+                "✅ Ledger signTransaction completed with output:",
+                output
+              );
+
+              subscription.unsubscribe();
+
+              if (!output.r || !output.s || typeof output.v === "undefined") {
+                reject(new Error("Incomplete signature returned from device"));
+                return;
+              }
+
+              // Create the signed transaction using ethers
+              ethersTransaction.signature = {
+                r: "0x" + output.r,
+                s: "0x" + output.s,
+                v: output.v,
+              };
+
+              resolve({
+                rawTransaction: ethersTransaction.serialized,
+                signature: {
+                  r: output.r,
+                  s: output.s,
+                  v: output.v.toString(),
+                },
+                hash: ethersTransaction.hash || "",
+              });
+            } else if (
+              state.status === DeviceActionStatus.Error &&
+              !isResolved
+            ) {
+              cleanup();
+              console.error("❌ Ledger signTransaction error:", state.error);
+              subscription.unsubscribe();
+              reject(
+                new Error(
+                  `Transaction signing failed: ${
+                    state.error || "Unknown error"
+                  }`
+                )
+              );
+            }
+            // For Pending states, we just log and continue waiting
+          },
+          error: (error) => {
+            if (!isResolved) {
+              cleanup();
+              console.error(
+                "❌ Ledger signTransaction observable error:",
+                error
+              );
+              subscription.unsubscribe();
+              reject(new Error(`Observable error: ${error.message || error}`));
+            }
+          },
+          complete: () => {
+            if (!isResolved) {
+              cleanup();
+              console.log(
+                "🏁 Ledger signTransaction observable completed without result"
+              );
+              subscription.unsubscribe();
+              reject(
+                new Error("Observable completed without returning signature")
+              );
+            }
+          },
+        });
+      });
+    } catch (error: any) {
+      console.error("❌ Failed to sign Ethereum transaction:", error);
+      throw new Error(`Failed to sign transaction: ${error.message || error}`);
+    }
+  }
+
+  /**
    * Disconnect from a device
    */
   async disconnectDevice(deviceId: string): Promise<void> {
@@ -593,4 +819,9 @@ class LedgerService {
 
 // Export singleton instance
 export const ledgerService = new LedgerService();
-export type { LedgerDevice, LedgerAddress };
+export type {
+  LedgerDevice,
+  LedgerAddress,
+  EthereumTransaction,
+  SignedTransaction,
+};

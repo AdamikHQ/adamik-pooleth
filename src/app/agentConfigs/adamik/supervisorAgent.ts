@@ -787,6 +787,309 @@ const toolLogic: Record<string, any> = {
     }
   },
 
+  // Send funds FROM Ledger hardware wallet
+  sendFundsFromLedger: async ({
+    to,
+    amount,
+    chainId = "ethereum",
+    tokenSymbol,
+    gasLimit = "21000",
+    gasPrice,
+    maxFeePerGas,
+    maxPriorityFeePerGas,
+    nonce,
+    description,
+  }: {
+    to: string;
+    amount: string;
+    chainId?: string;
+    tokenSymbol?: string;
+    gasLimit?: string;
+    gasPrice?: string;
+    maxFeePerGas?: string;
+    maxPriorityFeePerGas?: string;
+    nonce: string;
+    description?: string;
+  }) => {
+    try {
+      console.log("✍️ Initiating Ledger transaction signing...");
+
+      // Validate required parameters
+      if (!to) {
+        throw new Error(
+          "Missing 'to' parameter - recipient address is required"
+        );
+      }
+
+      if (!amount && amount !== "0") {
+        throw new Error(
+          "Missing 'amount' parameter - transaction amount is required"
+        );
+      }
+
+      if (!nonce && nonce !== "0") {
+        throw new Error(
+          "Missing 'nonce' parameter - transaction nonce is required"
+        );
+      }
+
+      // Ensure chainId is EVM compatible
+      const evmChains = [
+        "ethereum",
+        "sepolia",
+        "holesky",
+        "base",
+        "base-sepolia",
+        "optimism",
+        "optimism-sepolia",
+        "arbitrum",
+        "arbitrum-sepolia",
+        "polygon",
+        "polygon-amoy",
+        "bsc",
+        "bsc-testnet",
+        "avalanche",
+        "avalanche-fuji",
+        "zksync",
+        "zksync-sepolia",
+        "linea",
+        "linea-sepolia",
+        "gnosis",
+        "gnosis-chiado",
+        "moonbeam",
+        "moonriver",
+        "moonbase",
+        "fantom",
+        "mantle",
+        "rootstock",
+        "rootstock-testnet",
+        "chiliz",
+        "chiliz-testnet",
+        "cronos",
+        "world-chain",
+        "monad-testnet",
+        "berachain",
+        "berachain-bepolia",
+        "injective-evm-testnet",
+      ];
+
+      if (!evmChains.includes(chainId)) {
+        throw new Error(
+          `Chain ${chainId} is not supported for Ledger signing. ` +
+            `Supported EVM chains: ${evmChains.join(", ")}`
+        );
+      }
+
+      // Map chainId to numeric chainId for transaction
+      const chainIdMap: Record<string, number> = {
+        ethereum: 1,
+        sepolia: 11155111,
+        holesky: 17000,
+        polygon: 137,
+        "polygon-amoy": 80002,
+        bsc: 56,
+        "bsc-testnet": 97,
+        avalanche: 43114,
+        "avalanche-fuji": 43113,
+        arbitrum: 42161,
+        "arbitrum-sepolia": 421614,
+        optimism: 10,
+        "optimism-sepolia": 11155420,
+        base: 8453,
+        "base-sepolia": 84532,
+        fantom: 250,
+        gnosis: 100,
+        "gnosis-chiado": 10200,
+        linea: 59144,
+        "linea-sepolia": 59141,
+        moonbeam: 1284,
+        moonriver: 1285,
+        moonbase: 1287,
+        mantle: 5000,
+        rootstock: 30,
+        "rootstock-testnet": 31,
+        chiliz: 88888,
+        "chiliz-testnet": 88882,
+        cronos: 25,
+        "world-chain": 480,
+        "monad-testnet": 41454,
+        berachain: 80085,
+        "berachain-bepolia": 80085,
+        "injective-evm-testnet": 2357,
+        zksync: 324,
+        "zksync-sepolia": 300,
+      };
+
+      const numericChainId = chainIdMap[chainId];
+      if (!numericChainId) {
+        throw new Error(`Unsupported chainId: ${chainId}`);
+      }
+
+      // Check if trigger function exists
+      if (
+        typeof (window as any).__triggerLedgerSignTransaction !== "function"
+      ) {
+        console.error(
+          "❌ __triggerLedgerSignTransaction function not found on window object"
+        );
+        throw new Error(
+          "Ledger signing modal trigger function not available. Please refresh the page."
+        );
+      }
+
+      console.log(
+        "✅ Found __triggerLedgerSignTransaction function, proceeding..."
+      );
+
+      // Prepare transaction data for Ledger signing
+      const transactionData: any = {
+        to,
+        value: amount, // Amount in wei for native transfers, or "0" for token transfers
+        gasLimit,
+        nonce,
+        chainId: numericChainId,
+      };
+
+      // Add gas pricing (EIP-1559 vs legacy)
+      if (maxFeePerGas && maxPriorityFeePerGas) {
+        // EIP-1559 transaction
+        transactionData.maxFeePerGas = maxFeePerGas;
+        transactionData.maxPriorityFeePerGas = maxPriorityFeePerGas;
+      } else if (gasPrice) {
+        // Legacy transaction
+        transactionData.gasPrice = gasPrice;
+      } else {
+        // Default gas price for legacy (20 gwei)
+        transactionData.gasPrice = "20000000000";
+      }
+
+      // Handle token transfers
+      if (tokenSymbol) {
+        // For token transfers, we need to encode the ERC-20 transfer data
+        console.log(`🪙 Preparing ${tokenSymbol} token transfer...`);
+
+        // Note: For a complete implementation, you would need to:
+        // 1. Get the token contract address for the given symbol on the chain
+        // 2. Encode the ERC-20 transfer function call
+        // 3. Set transactionData.to to the token contract address
+        // 4. Set transactionData.data to the encoded function call
+        // 5. Set transactionData.value to "0"
+
+        throw new Error(
+          "Token transfers from Ledger are not yet implemented. " +
+            "Please use native currency transfers only."
+        );
+      }
+
+      // Add optional data field for contract interactions
+      if (!tokenSymbol) {
+        transactionData.data = "0x"; // Empty data for simple transfers
+      }
+
+      console.log("📋 Transaction data prepared:", transactionData);
+
+      // Trigger the modal flow and wait for result
+      const result = await new Promise<any>((resolve, reject) => {
+        // Store the promise resolvers globally so the modal can access them
+        const promiseId = Math.random().toString(36).substr(2, 9);
+        console.log(
+          `🆔 SUPERVISOR: Creating __ledgerSignPromise with ID: ${promiseId}`
+        );
+
+        const promiseData = {
+          resolve: (result: any) => {
+            console.log(
+              `✅ SUPERVISOR: Ledger sign promise ${promiseId} resolved with:`,
+              result
+            );
+            resolve(result);
+          },
+          reject: (error: any) => {
+            console.log(
+              `❌ SUPERVISOR: Ledger sign promise ${promiseId} rejected with:`,
+              error
+            );
+            reject(error);
+          },
+          id: promiseId,
+          timeoutId: null as any,
+        };
+
+        (window as any).__ledgerSignPromise = promiseData;
+        console.log(
+          "📋 SUPERVISOR: Ledger sign promise stored globally:",
+          promiseData
+        );
+
+        console.log(
+          "📞 SUPERVISOR: Calling __triggerLedgerSignTransaction()..."
+        );
+        // Trigger the modal to open
+        (window as any).__triggerLedgerSignTransaction?.(transactionData);
+
+        // Set a timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          console.warn(
+            `⏰ SUPERVISOR: Ledger transaction signing timed out after 180 seconds for promise ${promiseId}`
+          );
+          console.log(
+            "🔍 SUPERVISOR: Current promise at timeout:",
+            (window as any).__ledgerSignPromise
+          );
+
+          // Clean up the global promise before rejecting
+          if ((window as any).__ledgerSignPromise?.id === promiseId) {
+            delete (window as any).__ledgerSignPromise;
+            console.log(
+              `🧹 SUPERVISOR: Cleaned up timed out Ledger sign promise ${promiseId}`
+            );
+          } else {
+            console.warn(
+              `⚠️ SUPERVISOR: Ledger sign promise ${promiseId} not found or already replaced at timeout`
+            );
+          }
+
+          reject(
+            new Error("Ledger transaction signing timed out after 180 seconds")
+          );
+        }, 180000); // 3 minute timeout for Ledger signing
+
+        // Store timeout ID for potential cleanup
+        promiseData.timeoutId = timeoutId;
+        console.log(
+          `⏰ SUPERVISOR: Timeout ${timeoutId} set for Ledger sign promise ${promiseId}`
+        );
+      });
+
+      console.log("🎉 Received result from Ledger signing modal:", result);
+
+      const response = {
+        success: true,
+        signedTransaction: result.signedTransaction,
+        deviceId: result.deviceId,
+        deviceName: result.deviceName,
+        transactionHash: result.signedTransaction?.hash,
+        rawTransaction: result.signedTransaction?.rawTransaction,
+        signature: result.signedTransaction?.signature,
+        message: `Transaction signed successfully with Ledger device. Hash: ${result.signedTransaction?.hash}`,
+        description: description || `Send ${amount} wei to ${to}`,
+      };
+
+      const text = JSON.stringify(response);
+      return { content: [{ type: "text", text }] };
+    } catch (error: any) {
+      console.error("❌ Ledger transaction signing failed:", error);
+      const result = {
+        success: false,
+        error: error.message,
+        message:
+          "Ledger transaction signing failed. Please ensure your device is connected, unlocked, and try again.",
+      };
+      const text = JSON.stringify(result);
+      return { content: [{ type: "text", text }] };
+    }
+  },
+
   // Generic asset transfer function (DRY principle)
   transferAssets: async (
     {
@@ -1985,6 +2288,68 @@ export const toolDefinitions = [
         },
       },
       required: ["deviceId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "sendFundsFromLedger",
+    description:
+      "Send funds FROM Ledger hardware wallet to another address. This opens the Ledger signing modal to sign the transaction with the hardware device.",
+    parameters: {
+      type: "object",
+      properties: {
+        to: {
+          type: "string",
+          description: "The recipient address for the transaction",
+        },
+        amount: {
+          type: "string",
+          description:
+            "The amount to send in wei (smallest unit). For ETH: 1 ETH = 1000000000000000000 wei",
+        },
+        chainId: {
+          type: "string",
+          description:
+            "The EVM chain ID (default: 'ethereum'). Supported: 'ethereum', 'polygon', 'base', 'arbitrum', etc.",
+        },
+        tokenSymbol: {
+          type: "string",
+          description:
+            "The symbol of the token to transfer (e.g., 'USDC', 'DAI'). Leave empty for native currency transfer. NOTE: Token transfers are not yet implemented.",
+        },
+        gasLimit: {
+          type: "string",
+          description:
+            "The gas limit for the transaction (default: '21000' for simple transfers)",
+        },
+        gasPrice: {
+          type: "string",
+          description:
+            "The gas price in wei for legacy transactions (e.g., '20000000000' for 20 gwei)",
+        },
+        maxFeePerGas: {
+          type: "string",
+          description:
+            "The maximum fee per gas for EIP-1559 transactions (in wei)",
+        },
+        maxPriorityFeePerGas: {
+          type: "string",
+          description:
+            "The maximum priority fee per gas for EIP-1559 transactions (in wei)",
+        },
+        nonce: {
+          type: "string",
+          description:
+            "The nonce for the transaction (must be the next nonce for the sender account)",
+        },
+        description: {
+          type: "string",
+          description:
+            "A human-readable description of the transaction (optional)",
+        },
+      },
+      required: ["to", "amount", "nonce"],
       additionalProperties: false,
     },
   },
