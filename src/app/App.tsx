@@ -701,25 +701,23 @@ export default function App() {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center p-4">
         <div className="bg-white/80 backdrop-blur-sm p-10 rounded-3xl shadow-2xl max-w-md w-full border border-gray-200">
           <div className="text-center">
-            {/* Logo */}
+            {/* Welcome Text and Logo */}
             <div className="mb-8">
-              <Image
-                src="/Adamik_logo_flat_blue.svg"
-                alt="Adamik Agent"
-                width={200}
-                height={42}
-                className="mx-auto h-12 w-auto"
-              />
-            </div>
-
-            {/* Welcome Text */}
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                Welcome to Adamik Agent
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">
+                Welcome to
               </h1>
+              <div className="mb-4">
+                <Image
+                  src="/logo_pooleth.svg"
+                  alt="Pooleth"
+                  width={200}
+                  height={47}
+                  className="mx-auto h-12 w-auto"
+                />
+              </div>
               <p className="text-gray-600 leading-relaxed">
-                Your voice-enabled blockchain assistant. Sign in to get started
-                with automated blockchain interactions.
+                Your egg-celent crypto CFO assistant. Sign in to get started
+                with voice-powered portfolio management.
               </p>
             </div>
 
@@ -737,8 +735,7 @@ export default function App() {
                 🔐 Secure Wallet Creation
               </p>
               <p className="text-xs text-blue-600">
-                A secure embedded wallet will be automatically created for you
-                upon sign in
+                Privy will create a secure wallet for you automatically
               </p>
             </div>
 
@@ -767,14 +764,21 @@ export default function App() {
     <div className="text-base flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-800 relative">
       {/* Modern Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 max-md:px-4">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center space-x-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
             <Image
-              src="/Adamik_logo_flat_blue.svg"
-              alt="Adamik Logo"
+              src="/pooleth-hero.svg"
+              alt="Pooleth Hero"
               width={120}
-              height={40}
-              className="h-8 w-auto"
+              height={120}
+              className="h-14 w-auto"
+            />
+            <Image
+              src="/logo_pooleth.svg"
+              alt="Pooleth Logo"
+              width={132}
+              height={47}
+              className="h-11 w-auto"
             />
             {/* Removed as per instructions */}
           </div>

@@ -1,6 +1,6 @@
 # Pooleth – Your Egg-celent Crypto Nest Manager 🐣
 
-![Pooleth Logo](logo-pooleth.png)
+![Pooleth Logo](logo_pooleth.svg)
 
 **ETH Global Cannes 2025 Hackathon Project**
 
