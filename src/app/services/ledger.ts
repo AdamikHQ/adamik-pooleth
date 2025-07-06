@@ -655,10 +655,18 @@ class LedgerService {
                 return;
               }
 
+              // Helper function to ensure hex prefix without duplication
+              const ensureHexPrefix = (value: string): string => {
+                if (typeof value !== "string") {
+                  return value;
+                }
+                return value.startsWith("0x") ? value : "0x" + value;
+              };
+
               // Create the signed transaction using ethers
               ethersTransaction.signature = {
-                r: "0x" + output.r,
-                s: "0x" + output.s,
+                r: ensureHexPrefix(output.r),
+                s: ensureHexPrefix(output.s),
                 v: output.v,
               };
 

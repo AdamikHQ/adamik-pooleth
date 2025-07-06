@@ -827,7 +827,7 @@ const toolLogic: Record<string, any> = {
         );
       }
 
-      if (!nonce && nonce !== "0") {
+      if (nonce === undefined || nonce === null || nonce === "") {
         throw new Error(
           "Missing 'nonce' parameter - transaction nonce is required"
         );
